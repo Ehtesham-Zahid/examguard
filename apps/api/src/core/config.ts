@@ -18,6 +18,9 @@ export const config = {
   isProd: process.env.NODE_ENV === 'production',
   publicUrl: (external ?? origins[0]).replace(/\/$/, ''),
   email: {
+    // Preferred on hosts that block SMTP (e.g. Render free): a Google Apps Script web app that sends through Gmail over HTTPS
+    relayUrl: (process.env.EMAIL_RELAY_URL ?? '').trim(),
+    relaySecret: (process.env.EMAIL_RELAY_SECRET ?? '').trim(),
     // Gmail: SMTP_USER = the Gmail / Workspace address, SMTP_PASS = a 16-character App Password
     host: process.env.SMTP_HOST || 'smtp.gmail.com',
     port: Number(process.env.SMTP_PORT || 465),
@@ -32,4 +35,7 @@ export const config = {
   },
 };
 
-export const emailConfigured = () => !config.email.disabled && !!config.email.user && !!config.email.pass;
+/** 'relay' (Google Apps Script over HTTPS) wins over 'smtp' when both are set. */
+export const emailMode = (): 'relay' | 'smtp' | null =>
+  config.email.disabled ? null : config.email.relayUrl && config.email.relaySecret ? 'relay' : config.email.user && config.email.pass ? 'smtp' : null;
+export const emailConfigured = () => emailMode() !== null;

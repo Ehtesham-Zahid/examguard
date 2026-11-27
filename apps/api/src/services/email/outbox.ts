@@ -8,7 +8,7 @@ import crypto from 'node:crypto';
 import nodemailer, { type Transporter } from 'nodemailer';
 import { Prisma, type EmailOutbox } from '@prisma/client';
 import { prisma } from '../../core/prisma.js';
-import { config, emailConfigured } from '../../core/config.js';
+import { config, emailConfigured, emailMode } from '../../core/config.js';
 import { CATEGORY, examIcs, renderEmail, type EmailData, type EmailKind, type ExamInfo } from './templates.js';
 
 const MAX_ATTEMPTS = 5;
@@ -157,11 +157,59 @@ function getTransport() {
   }
   return transporter;
 }
-export const fromAddress = () => config.email.from || (config.email.user ? `ExamGuard <${config.email.user}>` : 'ExamGuard <no-reply@examguard.local>');
+export const fromAddress = () => config.email.from || (config.email.user ? `ExamGuard <${config.email.user}>` : 'ExamGuard');
+const NOT_CONFIGURED = 'Email delivery is not configured (set EMAIL_RELAY_URL + EMAIL_RELAY_SECRET, or SMTP_USER + SMTP_PASS)';
 
-export async function verifyTransport() {
-  if (!emailConfigured() && !testTransport) return { ok: false, error: 'Email is not configured: set SMTP_USER and SMTP_PASS' };
+/* ---- Google Apps Script relay: HTTPS POST to a web app that calls MailApp.sendEmail (see scripts/google-apps-script) */
+class RelayError extends Error {
+  constructor(
+    message: string,
+    public permanent = false,
+  ) {
+    super(message);
+  }
+}
+interface RelayMessage {
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+  replyTo?: string;
+  attachments?: { filename: string; contentType: string; base64: string }[];
+}
+async function callRelay(body: Record<string, unknown>) {
+  let res: Response;
   try {
+    // Apps Script answers a POST with a 302 to the result; fetch follows it (as GET), which is what Apps Script expects
+    res = await fetch(config.email.relayUrl, { method: 'POST', headers: { 'content-type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ secret: config.email.relaySecret, ...body }), redirect: 'follow', signal: AbortSignal.timeout(45_000) });
+  } catch (e) {
+    throw new RelayError(`Could not reach the email relay (${(e as Error).name === 'TimeoutError' ? 'timed out' : (e as Error).message}).`);
+  }
+  const raw = await res.text();
+  let json: { ok?: boolean; error?: string; id?: string; quota?: number; account?: string } | null = null;
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    // an HTML page means the deployment is wrong (not "Anyone" access, or a /dev URL)
+    throw new RelayError(/<html|<!doctype/i.test(raw) ? 'The relay URL returned a web page instead of JSON — redeploy the Apps Script as a Web app with access "Anyone" and use the /exec URL.' : `Relay returned an unexpected response (HTTP ${res.status}).`, true);
+  }
+  if (!json?.ok) {
+    const msg = json?.error ?? `Relay error (HTTP ${res.status})`;
+    // wrong secret / bad request won't fix themselves; quota and Google hiccups will
+    throw new RelayError(msg, /secret|invalid|unauthori[sz]ed|bad request/i.test(msg));
+  }
+  return json;
+}
+
+export async function verifyTransport(): Promise<{ ok: boolean; error?: string; quota?: number; account?: string }> {
+  if (testTransport) return { ok: true };
+  const mode = emailMode();
+  if (!mode) return { ok: false, error: NOT_CONFIGURED };
+  try {
+    if (mode === 'relay') {
+      const r = await callRelay({ action: 'ping' });
+      return { ok: true, quota: r.quota, account: r.account };
+    }
     await getTransport().verify();
     return { ok: true };
   } catch (e) {
@@ -169,10 +217,29 @@ export async function verifyTransport() {
   }
 }
 
+async function send(msg: RelayMessage & { kind: string; id: string }) {
+  if (emailMode() === 'relay' && !testTransport) {
+    const r = await callRelay({ action: 'send', ...msg, name: (config.email.from.match(/^(.*?)\s*</)?.[1] || 'ExamGuard').replace(/"/g, '') });
+    return r.id ?? null;
+  }
+  const info = await getTransport().sendMail({
+    from: fromAddress(),
+    to: msg.to,
+    replyTo: msg.replyTo,
+    subject: msg.subject,
+    html: msg.html,
+    text: msg.text,
+    attachments: msg.attachments?.map((a) => ({ filename: a.filename, content: Buffer.from(a.base64, 'base64'), contentType: a.contentType })),
+    headers: { 'X-ExamGuard-Email': msg.kind, 'X-Entity-Ref-ID': msg.id },
+  });
+  return info.messageId ?? null;
+}
+
 function friendlyError(e: unknown) {
+  if (e instanceof RelayError) return e.message.slice(0, 500);
   const err = e as { code?: string; responseCode?: number; message?: string };
   if (err.responseCode === 535 || /Username and Password not accepted|Invalid login/i.test(err.message ?? '')) return 'Gmail rejected the login — check SMTP_USER and that SMTP_PASS is a 16-character App Password (2-Step Verification must be on).';
-  if (err.code === 'ETIMEDOUT' || err.code === 'ECONNECTION' || err.code === 'ESOCKET') return `Could not reach ${config.email.host}:${config.email.port} (${err.code}). The host may block outbound SMTP — try SMTP_PORT=587.`;
+  if (err.code === 'ETIMEDOUT' || err.code === 'ECONNECTION' || err.code === 'ESOCKET') return `Could not reach ${config.email.host}:${config.email.port} (${err.code}). This host blocks outbound SMTP (Render's free plan does) — use the Google Apps Script relay instead: set EMAIL_RELAY_URL and EMAIL_RELAY_SECRET.`;
   return (err.message ?? String(e)).slice(0, 500);
 }
 
@@ -184,7 +251,7 @@ export function renderRow(row: Pick<EmailOutbox, 'kind' | 'data'>) {
 function attachmentsFor(row: EmailOutbox) {
   const d = row.data as EmailData;
   if ((row.kind === 'exam_scheduled' || row.kind === 'exam_reminder') && d.exam) {
-    return [{ filename: 'exam.ics', content: examIcs(d.exam as ExamInfo), contentType: 'text/calendar; charset=utf-8; method=PUBLISH' }];
+    return [{ filename: 'exam.ics', base64: Buffer.from(examIcs(d.exam as ExamInfo)).toString('base64'), contentType: 'text/calendar; charset=utf-8; method=PUBLISH' }];
   }
   return [];
 }
@@ -201,24 +268,15 @@ async function deliver(row: EmailOutbox) {
     return prisma.emailOutbox.update({ where: { id: row.id }, data: { status: 'SKIPPED', lastError: 'Demo address on a reserved domain — it can never receive mail' } });
   }
   if (!emailConfigured() && !testTransport) {
-    return prisma.emailOutbox.update({ where: { id: row.id }, data: { status: 'SKIPPED', lastError: 'Email delivery is not configured (set SMTP_USER and SMTP_PASS)' } });
+    return prisma.emailOutbox.update({ where: { id: row.id }, data: { status: 'SKIPPED', lastError: NOT_CONFIGURED } });
   }
   const r = renderRow(row);
   try {
-    const info = await getTransport().sendMail({
-      from: fromAddress(),
-      to: row.to,
-      replyTo: config.email.replyTo,
-      subject: r.subject,
-      html: r.html,
-      text: r.text,
-      attachments: attachmentsFor(row),
-      headers: { 'X-ExamGuard-Email': row.kind, 'X-Entity-Ref-ID': row.id },
-    });
-    await prisma.emailOutbox.update({ where: { id: row.id }, data: { status: 'SENT', sentAt: new Date(), messageId: info.messageId ?? null, lastError: null, data: redact(row.data) } });
+    const messageId = await send({ id: row.id, kind: row.kind, to: row.to, replyTo: config.email.replyTo, subject: r.subject, html: r.html, text: r.text, attachments: attachmentsFor(row) });
+    await prisma.emailOutbox.update({ where: { id: row.id }, data: { status: 'SENT', sentAt: new Date(), messageId, lastError: null, data: redact(row.data) } });
   } catch (e) {
-    // 5xx = permanent rejection (bad address, auth refused): retrying won't help, an admin can retry after fixing it
-    const permanent = ((e as { responseCode?: number }).responseCode ?? 0) >= 500;
+    // permanent rejection (SMTP 5xx, wrong relay secret, bad deployment): retrying won't help; an admin can retry after fixing it
+    const permanent = e instanceof RelayError ? e.permanent : ((e as { responseCode?: number }).responseCode ?? 0) >= 500;
     const final = permanent || row.attempts >= MAX_ATTEMPTS;
     const backoffSec = Math.min(3600, 30 * 2 ** (row.attempts - 1)); // 30s, 1m, 2m, 4m…
     await prisma.emailOutbox.update({
@@ -309,10 +367,11 @@ export async function scheduleExamEmails(now = new Date()) {
 }
 
 export function startEmailWorker() {
-  if (emailConfigured()) {
-    void verifyTransport().then((r) => console.log(r.ok ? `[email] SMTP ready (${config.email.host}:${config.email.port} as ${config.email.user})` : `[email] SMTP check failed: ${r.error}`));
+  const mode = emailMode();
+  if (mode) {
+    void verifyTransport().then((r) => console.log(r.ok ? `[email] ${mode === 'relay' ? `Apps Script relay ready${r.account ? ` (${r.account}, ${r.quota} sends left today)` : ''}` : `SMTP ready (${config.email.host}:${config.email.port} as ${config.email.user})`}` : `[email] ${mode} check failed: ${r.error}`));
   } else {
-    console.log('[email] SMTP_USER / SMTP_PASS not set — emails are recorded in the admin email log but not delivered');
+    console.log('[email] not configured — emails are recorded in the admin email log but not delivered');
   }
   const send = setInterval(() => void processOutbox(), 15_000);
   let scheduling = false;

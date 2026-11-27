@@ -57,7 +57,7 @@ The smoke test covers RBAC, ownership isolation, lifecycle rules, time windows, 
 
 ### Email notifications
 
-ExamGuard emails candidates and staff through **Gmail SMTP with a Google App Password**:
+ExamGuard emails candidates and staff from a Google account, through a **Google Apps Script relay** (works on any host) or **Gmail SMTP**:
 
 | Email | Who | When |
 |---|---|---|
@@ -76,7 +76,11 @@ ExamGuard emails candidates and staff through **Gmail SMTP with a Google App Pas
 * **Admin → Email log:** every email with a pixel-exact preview (designed and plain-text), status, errors, retry, and a "send a test email" box.
 * **Demo accounts** use the reserved `examguard.test` domain, which can never receive mail, so their emails are shown as *Not sent* (open them to preview).
 
-**Turning it on:** enable 2-Step Verification on the Google account, create an App Password at <https://myaccount.google.com/apppasswords>, then set `SMTP_USER` (the Gmail address) and `SMTP_PASS` (the App Password) in `apps/api/.env` locally or in Render → Environment. Optional: `EMAIL_FROM`, `SMTP_PORT` (465 or 587), `EMAIL_TIMEZONE`. Send yourself a test from Admin → Email log.
+**Turning it on:** two delivery options, both sending from your Google account.
+* **Google Apps Script relay (use this on Render's free plan, which blocks SMTP):** paste [`apps/api/scripts/google-apps-script/Code.gs`](apps/api/scripts/google-apps-script/Code.gs) into a new Apps Script project, set a secret, deploy it as a Web app, then set `EMAIL_RELAY_URL` and `EMAIL_RELAY_SECRET`. Step-by-step: [`SETUP.md`](apps/api/scripts/google-apps-script/SETUP.md).
+* **Gmail SMTP (hosts that allow SMTP):** enable 2-Step Verification, create an App Password at <https://myaccount.google.com/apppasswords>, and set `SMTP_USER` and `SMTP_PASS`.
+
+Set them in `apps/api/.env` locally or in Render → Environment, then send yourself a test from Admin → Email log.
 
 ---
 

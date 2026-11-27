@@ -27,7 +27,7 @@ interface ListResp {
   page: number;
   pageSize: number;
   counts: Record<Status, number>;
-  config: { configured: boolean; from: string; host: string; user: string | null; timeZone: string };
+  config: { configured: boolean; mode: 'relay' | 'smtp' | null; from: string; host: string; user: string | null; timeZone: string };
 }
 interface Detail extends Row {
   html: string;
@@ -196,7 +196,7 @@ function DeliveryCard({ cfg }: { cfg: ListResp['config'] }) {
   const [to, setTo] = useState('');
   const [err, setErr] = useState('');
   const [sentId, setSentId] = useState<string | null>(null);
-  const status = useQuery({ queryKey: ['admin-emails-status'], queryFn: () => api<{ check: { ok: boolean; error?: string } }>('/admin/emails/status'), enabled: cfg.configured, staleTime: 60_000 });
+  const status = useQuery({ queryKey: ['admin-emails-status'], queryFn: () => api<{ check: { ok: boolean; error?: string; quota?: number; account?: string } }>('/admin/emails/status'), enabled: cfg.configured, staleTime: 60_000 });
   const send = useMutation({
     mutationFn: () => api<{ id: string }>('/admin/emails/test', { body: { to: to.trim() } }),
     onSuccess: (r) => {
@@ -225,7 +225,17 @@ function DeliveryCard({ cfg }: { cfg: ListResp['config'] }) {
               <>
                 <div className="font-semibold">{status.data?.check.ok === false ? 'Email delivery has a problem' : 'Email delivery is on'}</div>
                 <p className="mt-0.5 text-ink-2">
-                  Sending as <strong className="text-ink">{cfg.from}</strong> via <span className="font-mono text-[12px]">{cfg.host}</span>. Times in emails use {cfg.timeZone}.
+                  {cfg.mode === 'relay' ? (
+                    <>
+                      Sending through the Google Apps Script relay{status.data?.check.account ? <> as <strong className="text-ink">{status.data.check.account}</strong></> : ''}
+                      {status.data?.check.quota != null && <> · <strong className="text-ink">{status.data.check.quota}</strong> sends left today</>}.
+                    </>
+                  ) : (
+                    <>
+                      Sending as <strong className="text-ink">{cfg.from}</strong> via <span className="font-mono text-[12px]">{cfg.host}</span>.
+                    </>
+                  )}{' '}
+                  Times in emails use {cfg.timeZone}.
                 </p>
                 {status.data?.check.ok === false && (
                   <p role="alert" className="mt-2 flex items-start gap-2 rounded-lg bg-warn-soft px-3 py-2 text-warn">
@@ -237,7 +247,7 @@ function DeliveryCard({ cfg }: { cfg: ListResp['config'] }) {
               <>
                 <div className="font-semibold">Email delivery isn’t configured yet</div>
                 <p className="mt-0.5 text-ink-2">
-                  Emails are still created and previewable here, but nothing leaves the server. Set <code className="font-mono text-[12px]">SMTP_USER</code> (the Gmail address) and <code className="font-mono text-[12px]">SMTP_PASS</code> (a Google App Password) in the server environment, then retry anything you want delivered.
+                  Emails are still created and previewable here, but nothing leaves the server. Set up the Google Apps Script relay (see <span className="font-mono text-[12px]">apps/api/scripts/google-apps-script/SETUP.md</span>) and add <code className="font-mono text-[12px]">EMAIL_RELAY_URL</code> and <code className="font-mono text-[12px]">EMAIL_RELAY_SECRET</code> to the server environment — or <code className="font-mono text-[12px]">SMTP_USER</code> / <code className="font-mono text-[12px]">SMTP_PASS</code> on hosts that allow SMTP.
                 </p>
               </>
             )}

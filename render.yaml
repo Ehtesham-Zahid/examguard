@@ -20,8 +20,13 @@ services:
         generateValue: true
       - key: SEED_ON_START
         value: "true"
-      # Email (Gmail App Password). Fill these in the Render dashboard: Environment → SMTP_USER / SMTP_PASS.
-      # Until they are set, emails are recorded in Admin → Email log but not delivered.
+      # Email. Render's free plan blocks SMTP, so use the Google Apps Script relay (apps/api/scripts/google-apps-script/SETUP.md):
+      # fill EMAIL_RELAY_URL + EMAIL_RELAY_SECRET in the dashboard. (SMTP_* only work on plans/hosts that allow SMTP.)
+      # Until one is set, emails are recorded in Admin → Email log but not delivered.
+      - key: EMAIL_RELAY_URL
+        sync: false
+      - key: EMAIL_RELAY_SECRET
+        sync: false
       - key: SMTP_USER
         sync: false
       - key: SMTP_PASS

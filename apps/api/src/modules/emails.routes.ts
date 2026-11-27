@@ -7,7 +7,7 @@ import { authenticate, currentUser, requireRole } from '../core/auth.js';
 import { badRequest, conflict, notFound } from '../core/errors.js';
 import { param, parseBody, parseQuery } from '../core/validate.js';
 import { audit } from '../core/audit.js';
-import { config, emailConfigured } from '../core/config.js';
+import { config, emailConfigured, emailMode } from '../core/config.js';
 import { fromAddress, isReservedAddress, kick, queueEmails, renderRow, verifyTransport } from '../services/email/outbox.js';
 
 export const emailsRouter = Router();
@@ -37,12 +37,12 @@ emailsRouter.get('/', async (req, res) => {
     page: q.page,
     pageSize: q.pageSize,
     counts: Object.fromEntries(STATUSES.map((s) => [s, counts.find((c) => c.status === s)?._count ?? 0])),
-    config: { configured: emailConfigured(), from: fromAddress(), host: `${config.email.host}:${config.email.port}`, user: config.email.user || null, timeZone: config.email.timeZone },
+    config: { configured: emailConfigured(), mode: emailMode(), from: emailMode() === 'relay' ? 'your Google account (Apps Script)' : fromAddress(), host: emailMode() === 'relay' ? 'Google Apps Script relay (HTTPS)' : `${config.email.host}:${config.email.port}`, user: config.email.user || null, timeZone: config.email.timeZone },
   });
 });
 
 emailsRouter.get('/status', async (_req, res) => {
-  res.json({ configured: emailConfigured(), from: fromAddress(), host: `${config.email.host}:${config.email.port}`, check: await verifyTransport() });
+  res.json({ configured: emailConfigured(), mode: emailMode(), check: await verifyTransport() });
 });
 
 emailsRouter.get('/:id', async (req, res) => {
