@@ -2,14 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { ArrowLeft, ArrowRight, BookCheck, CheckCircle2, ClipboardList, EyeOff, PartyPopper, Save } from 'lucide-react';
+import { ArrowLeft, ArrowRight, BookCheck, CheckCircle2, ClipboardList, EyeOff, PartyPopper, Save, Scale, Sparkles, Square } from 'lucide-react';
 import { api, errMsg } from '@/lib/api';
 import { RichText } from '@/components/RichText';
-import { Badge, Button, Card, cx, EmptyState, ErrorBox, Field, Kbd, PageHeader, ProgressBar, Spinner, Textarea, Toggle } from '@/components/ui';
+import { Badge, Button, Card, ConfirmDialog, cx, EmptyState, ErrorBox, Field, Kbd, Modal, PageHeader, ProgressBar, Spinner, Textarea, Toggle } from '@/components/ui';
+import { AiSuggestionPanel, ConsistencyReport, HighlightedAnswer, type ConsistencyData } from '@/components/ops/ai';
 import { ScoreInput, validateScore, WrittenResponse } from '@/components/ops/answers';
 import { fmtScore } from '@/components/ops/bits';
 import { useHotkeys } from '@/components/ops/hooks';
-import type { GradingData, GradingItem } from '@/components/ops/types';
+import type { AiJob, AiSuggestion, GradingData, GradingItem } from '@/components/ops/types';
 
 interface ExamLite {
   id: string;
@@ -64,6 +65,93 @@ export default function Grading() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemKey]);
 
+  /* ---------- AI marking assistant ---------- */
+  const aiEnabled = !!q.data?.ai?.enabled;
+  const [activeQuote, setActiveQuote] = useState<number | null>(null);
+  useEffect(() => setActiveQuote(null), [itemKey]);
+  const patchItem = (answerId: string, patch: (i: GradingItem) => GradingItem) =>
+    qc.setQueriesData<GradingData>({ queryKey: ['grading', id] }, (old) => (old ? { ...old, groups: old.groups.map((g) => ({ ...g, items: g.items.map((i) => (i.answerId === answerId ? patch(i) : i)) })) } : old));
+  const suggest = useMutation({
+    mutationFn: (v: { answerId: string; force: boolean }) => api<{ suggestion: AiSuggestion }>(`/staff/answers/${v.answerId}/ai-suggest`, { body: { force: v.force } }),
+    onSuccess: (r, v) => {
+      patchItem(v.answerId, (i) => ({ ...i, ai: r.suggestion }));
+      if (r.suggestion.status === 'FAILED') toast.error(r.suggestion.error ?? 'No suggestion');
+    },
+    onError: (e) => toast.error(errMsg(e)),
+  });
+  const aiLoading = suggest.isPending && suggest.variables?.answerId === item?.answerId;
+  const requestAi = (force = false) => item?.answerId && item.text.trim() && aiEnabled && !aiLoading && suggest.mutate({ answerId: item.answerId, force });
+  const acceptAi = () => {
+    const s = item?.ai;
+    if (!s || s.status !== 'READY' || s.score == null) return;
+    setScore(String(s.score));
+    if (!feedback.trim() && s.feedback) setFeedback(s.feedback);
+    scoreRef.current?.focus();
+    toast.success(`AI mark ${s.score}/${s.maxScore} filled in`, { description: 'Change it if you disagree, then press Enter to save.', duration: 2500 });
+  };
+  const useAiFeedback = () => item?.ai?.feedback && setFeedback(item.ai.feedback);
+
+  // batch suggestions for the current question, with live progress
+  const [batchAsk, setBatchAsk] = useState<{ count: number } | null>(null);
+  const job: AiJob | null | undefined = q.data?.ai?.job;
+  // keep polling from the moment a batch starts until the server says it's finished (even very fast batches)
+  const [watching, setWatching] = useState(false);
+  const status = useQuery({
+    queryKey: ['ai-status', id],
+    queryFn: () => api<{ job: AiJob | null }>(`/staff/exams/${id}/ai/status`),
+    enabled: aiEnabled && (watching || !!job?.running),
+    refetchInterval: (qq) => (qq.state.data?.job?.running === false ? false : 1500),
+  });
+  const liveJob = status.data?.job ?? job;
+  const lastDone = useRef(-1);
+  useEffect(() => {
+    const j = status.data?.job;
+    if (!j) return;
+    if (j.done !== lastDone.current) {
+      lastDone.current = j.done;
+      qc.invalidateQueries({ queryKey: ['grading', id] });
+    }
+    if (!j.running && watching) {
+      setWatching(false);
+      if (j.total) (j.failed ? toast.warning : toast.success)(`AI suggestions ready for ${j.done - j.failed} answer(s)${j.failed ? ` · ${j.failed} failed` : ''}`, j.failed && j.lastError ? { description: j.lastError } : undefined);
+      qc.invalidateQueries({ queryKey: ['grading', id] });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status.data?.job?.done, status.data?.job?.running, status.dataUpdatedAt]);
+  const countBatch = useMutation({
+    mutationFn: () => api<{ count: number; max: number }>(`/staff/exams/${id}/ai/batch`, { body: { questionId: group?.questionId, dryRun: true } }),
+    onSuccess: (r) => (r.count ? setBatchAsk({ count: r.count }) : toast.info('Every non-blank answer to this question already has an AI suggestion')),
+    onError: (e) => toast.error(errMsg(e)),
+  });
+  const startBatch = useMutation({
+    mutationFn: () => api<{ started: boolean; queued?: number }>(`/staff/exams/${id}/ai/batch`, { body: { questionId: group?.questionId } }),
+    onSuccess: () => {
+      setBatchAsk(null);
+      lastDone.current = -1;
+      setWatching(true);
+      qc.invalidateQueries({ queryKey: ['grading', id] });
+      qc.invalidateQueries({ queryKey: ['ai-status', id] });
+    },
+    onError: (e) => toast.error(errMsg(e)),
+  });
+  const cancelBatch = useMutation({ mutationFn: () => api(`/staff/exams/${id}/ai/cancel`, { method: 'POST' }), onSuccess: () => qc.invalidateQueries({ queryKey: ['ai-status', id] }) });
+
+  // consistency check
+  const [checkOpen, setCheckOpen] = useState(false);
+  const consistency = useQuery({ queryKey: ['ai-consistency', id], queryFn: () => api<ConsistencyData>(`/staff/exams/${id}/ai/consistency`), enabled: checkOpen, staleTime: 0 });
+  const locate = (answerId: string) => {
+    const gs = q.data?.groups ?? [];
+    for (let g = 0; g < gs.length; g++) {
+      const i = gs[g].items.findIndex((x) => x.answerId === answerId);
+      if (i >= 0) return { g, i };
+    }
+    return null;
+  };
+  const labelOf = (answerId: string) => {
+    const at = locate(answerId);
+    return at ? `Q${at.g + 1} · ${q.data!.groups[at.g].items[at.i].candidate}` : 'An answer';
+  };
+
   const published = !!exam.data?.resultsPublishedAt;
   const scoreErr = item ? validateScore(score, item.marks) : null;
   const reasonErr = published && reason.trim().length < 3 ? 'Results are published — give a reason for changing this grade' : null;
@@ -96,8 +184,9 @@ export default function Grading() {
 
   const save = useMutation({
     mutationFn: (v: { answerId: string; score: number; feedback: string }) =>
-      api<{ attemptScore: number; gradingStatus: string }>(`/staff/answers/${v.answerId}/grade`, { method: 'PUT', body: { score: v.score, feedback: v.feedback || undefined, reason: published ? reason.trim() : undefined } }),
-    onSuccess: (_r, v) => {
+      api<{ attemptScore: number; gradingStatus: string; aiDecision: 'ACCEPTED' | 'ADJUSTED' | null }>(`/staff/answers/${v.answerId}/grade`, { method: 'PUT', body: { score: v.score, feedback: v.feedback || undefined, reason: published ? reason.trim() : undefined } }),
+    onSuccess: (r, v) => {
+      if (r.aiDecision) patchItem(v.answerId, (i) => (i.ai ? { ...i, ai: { ...i.ai, decision: r.aiDecision, finalScore: v.score } } : i));
       // update every cached variant (anonymous / named) so progress moves instantly
       qc.setQueriesData<GradingData>({ queryKey: ['grading', id] }, (old) => {
         if (!old) return old;
@@ -110,7 +199,7 @@ export default function Grading() {
             return { ...i, manualScore: v.score, feedback: v.feedback, graded: true };
           }),
         }));
-        return { groups, progress: { ...old.progress, done: old.progress.done + newlyDone } };
+        return { ...old, groups, progress: { ...old.progress, done: old.progress.done + newlyDone } };
       });
       qc.invalidateQueries({ queryKey: ['results'] });
       qc.invalidateQueries({ queryKey: ['analytics'] });
@@ -131,7 +220,7 @@ export default function Grading() {
     save.mutate({ answerId: item.answerId, score: Number(score), feedback: feedback.trim() });
   };
 
-  useHotkeys({ j: next, k: prev, n: nextUngraded, Enter: (e) => !(e.target as HTMLElement).closest('button,a') && submit(), '0': () => item && setScore('0'), h: () => item && setScore(String(Math.round((item.marks / 2) * 100) / 100)), f: () => item && setScore(String(item.marks)) });
+  useHotkeys({ j: next, k: prev, n: nextUngraded, Enter: (e) => !(e.target as HTMLElement).closest('button,a') && submit(), '0': () => item && setScore('0'), h: () => item && setScore(String(Math.round((item.marks / 2) * 100) / 100)), f: () => item && setScore(String(item.marks)), a: acceptAi, s: () => requestAi(false) });
 
   const progress = q.data?.progress ?? { total: 0, done: 0 };
   const complete = progress.total > 0 && progress.done >= progress.total;
@@ -145,6 +234,9 @@ export default function Grading() {
           <div className="rounded-lg border border-line bg-surface px-3">
             <Toggle checked={anonymous} onChange={setAnonymous} label="Blind marking" description="Hide candidate names" />
           </div>
+          <Button variant="outline" icon={<Scale className="size-4" />} onClick={() => setCheckOpen(true)}>
+            Consistency check
+          </Button>
           <Link to={`/examiner/exams/${id}/results`} className="inline-flex h-10 items-center gap-2 rounded-lg border border-line-strong bg-surface px-4 text-sm font-medium hover:bg-surface-2">
             Results
           </Link>
@@ -229,6 +321,36 @@ export default function Grading() {
                 <Badge>{group.marks} marks</Badge>
               </div>
               <RichText text={group.body} className="exam-text text-ink" />
+              {aiEnabled && (
+                <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-dashed border-line-strong px-3.5 py-2.5">
+                  {liveJob?.running ? (
+                    <>
+                      <Sparkles className="size-4 animate-pulse text-ink" aria-hidden />
+                      <div className="min-w-[160px] flex-1">
+                        <div className="mb-1 flex justify-between text-[12px] text-ink-2">
+                          <span>Claude is suggesting marks…</span>
+                          <span className="tabular">
+                            {liveJob.done} / {liveJob.total}
+                          </span>
+                        </div>
+                        <ProgressBar value={liveJob.done} max={liveJob.total} className="h-1.5" label="AI suggestions progress" />
+                      </div>
+                      <Button size="sm" variant="ghost" icon={<Square className="size-3.5" />} onClick={() => cancelBatch.mutate()}>
+                        Stop
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="min-w-0 flex-1 text-[13px] text-ink-2">
+                        <strong className="text-ink">AI marking assistant.</strong> Get suggested marks for every answer to this question, then review them one by one.
+                      </p>
+                      <Button size="sm" variant="highlight" icon={<Sparkles className="size-4" />} loading={countBatch.isPending} onClick={() => countBatch.mutate()}>
+                        Suggest for all answers
+                      </Button>
+                    </>
+                  )}
+                </div>
+              )}
               {group.rubric && (
                 <div className="mt-4 rounded-lg border border-line bg-surface-2/60 p-3.5">
                   <div className="mb-1.5 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide text-ink-2">
@@ -281,9 +403,24 @@ export default function Grading() {
                   </button>
                 ))}
               </div>
-              <div className="px-5 py-4">
-                <WrittenResponse text={item.text} />
-                {!item.text.trim() && <p className="mt-2 text-[12px] text-muted">Blank answers are scored 0 automatically — you can still override.</p>}
+              <div className="grid gap-4 px-5 py-4">
+                <div>
+                  {item.ai?.status === 'READY' && item.ai.evidence.length ? <HighlightedAnswer text={item.text} quotes={item.ai.evidence} active={activeQuote} /> : <WrittenResponse text={item.text} />}
+                  {!item.text.trim() && <p className="mt-2 text-[12px] text-muted">Blank answers are scored 0 automatically — you can still override.</p>}
+                </div>
+                {item.answerId && (
+                  <AiSuggestionPanel
+                    enabled={aiEnabled}
+                    blank={!item.text.trim()}
+                    suggestion={item.ai}
+                    loading={aiLoading}
+                    onRequest={(force) => requestAi(force)}
+                    onAccept={acceptAi}
+                    onUseFeedback={useAiFeedback}
+                    activeQuote={activeQuote}
+                    onQuoteHover={setActiveQuote}
+                  />
+                )}
               </div>
 
               <form
@@ -320,7 +457,7 @@ export default function Grading() {
                 )}
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="hidden text-[12px] text-muted sm:block">
-                    <Kbd>J</Kbd>/<Kbd>K</Kbd> next/prev · <Kbd>0</Kbd> <Kbd>H</Kbd> <Kbd>F</Kbd> zero/half/full · <Kbd>Enter</Kbd> save &amp; next · <Kbd>N</Kbd> next ungraded
+                    <Kbd>J</Kbd>/<Kbd>K</Kbd> next/prev · <Kbd>0</Kbd> <Kbd>H</Kbd> <Kbd>F</Kbd> zero/half/full{aiEnabled && <> · <Kbd>S</Kbd> suggest · <Kbd>A</Kbd> use AI mark</>} · <Kbd>Enter</Kbd> save &amp; next · <Kbd>N</Kbd> next ungraded
                   </p>
                   <Button type="submit" loading={save.isPending} disabled={!item.answerId} icon={<Save className="size-4" />}>
                     Save &amp; next
@@ -331,6 +468,34 @@ export default function Grading() {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={!!batchAsk}
+        onClose={() => setBatchAsk(null)}
+        onConfirm={() => startBatch.mutate()}
+        loading={startBatch.isPending}
+        title={`Suggest marks for ${batchAsk?.count ?? 0} answer(s)?`}
+        confirmLabel="Start"
+        body={
+          <div className="grid gap-2 text-sm text-ink-2">
+            <p>Claude will read each ungraded answer to this question against your rubric and suggest a mark, reasons and feedback. Candidates' names are never sent.</p>
+            <p>Nothing is saved as a grade — you still review and confirm each mark. This uses Claude API credits.</p>
+          </div>
+        }
+      />
+      <Modal open={checkOpen} onClose={() => setCheckOpen(false)} title="Consistency check" description="Catch unfair differences before results go out." size="lg">
+        <ConsistencyReport
+          data={consistency.data}
+          loading={consistency.isLoading}
+          label={labelOf}
+          onOpen={(answerId) => {
+            const at = locate(answerId);
+            if (!at) return toast.info('That answer is not in this list');
+            setCheckOpen(false);
+            goto(at.g, at.i);
+          }}
+        />
+      </Modal>
     </div>
   );
 }

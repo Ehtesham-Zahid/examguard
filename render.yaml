@@ -39,3 +39,6 @@ services:
         value: "465"
       - key: EMAIL_TIMEZONE
         value: Asia/Karachi
+      # AI marking assistant: paste a Claude API key in the dashboard (Environment → ANTHROPIC_API_KEY). Off until set.
+      - key: ANTHROPIC_API_KEY
+        sync: false

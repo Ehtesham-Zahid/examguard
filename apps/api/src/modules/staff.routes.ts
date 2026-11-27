@@ -14,6 +14,9 @@ import { issueCertificate } from '../services/certificates.service.js';
 import { audit } from '../core/audit.js';
 import { emitToMonitors, emitToUser } from '../core/realtime.js';
 import { notify } from '../core/notify.js';
+import { aiConfig, aiEnabled } from '../core/config.js';
+import { AiInputError, batchCandidates, cancelJob, consistencyReport, jobStatus, latestFor, recordDecision, serialize, startBatch, suggestForAnswer } from '../services/ai/assistant.js';
+import { inputHash } from '../services/ai/grader.js';
 import { queueEmails, queueForUsers } from '../services/email/outbox.js';
 import { SIGNALS } from '../services/integrity.service.js';
 
@@ -222,7 +225,15 @@ staffRouter.get('/exams/:id/grading', async (req, res) => {
   const list = [...groups.values()];
   const total = list.reduce((s, g) => s + g.items.length, 0);
   const done = list.reduce((s, g) => s + (g.items as { graded: boolean }[]).filter((i) => i.graded).length, 0);
-  res.json({ groups: list, progress: { total, done } });
+  // attach the latest AI suggestion (marked stale if the question/rubric/answer changed since)
+  const latest = await latestFor(aqs.flatMap((aq) => (aq.answer ? [aq.answer.id] : [])));
+  for (const aq of aqs) {
+    if (!aq.answer) continue;
+    const s = latest.get(aq.answer.id);
+    const item = (groups.get(aq.questionVersion.questionId)!.items as { answerId?: string; ai?: unknown }[]).find((i) => i.answerId === aq.answer!.id);
+    if (item && s) item.ai = serialize(s, inputHash({ question: aq.questionVersion.body, rubric: aq.questionVersion.rubric, maxMarks: aq.marks, answer: ((aq.answer.response as { text?: string } | null)?.text ?? '').trim() }));
+  }
+  res.json({ groups: list, progress: { total, done }, ai: { enabled: aiEnabled(), model: aiConfig.model, job: jobStatus(exam.id) } });
 });
 
 staffRouter.put('/answers/:id/grade', async (req, res) => {
@@ -239,8 +250,62 @@ staffRouter.put('/answers/:id/grade', async (req, res) => {
   await prisma.answer.update({ where: { id: answer.id }, data: { manualScore: body.score, feedback: body.feedback, gradedById: me.id, gradedAt: new Date() } });
   const updated = await prisma.$transaction((tx) => gradeAttempt(tx, attempt.id));
   if (attempt.exam.resultsPublishedAt) await issueCertificate(attempt.id);
-  audit(me.id, 'answer.grade', 'Attempt', attempt.id, { answerId: answer.id, before, after: body.score, reason: body.reason });
-  res.json({ ok: true, attemptScore: updated.score, gradingStatus: updated.gradingStatus });
+  const ai = await recordDecision(answer.id, body.score, me.id);
+  audit(me.id, 'answer.grade', 'Attempt', attempt.id, { answerId: answer.id, before, after: body.score, reason: body.reason, ...(ai ? { aiSuggestion: ai.suggestionId, aiScore: ai.aiScore, aiDecision: ai.decision } : {}) });
+  res.json({ ok: true, attemptScore: updated.score, gradingStatus: updated.gradingStatus, aiDecision: ai?.decision ?? null });
+});
+
+/* --------------------------------- AI marking assistant --------------------------------- */
+const AI_OFF = 'The AI marking assistant is not configured. Add ANTHROPIC_API_KEY to the server environment.';
+
+staffRouter.post('/answers/:id/ai-suggest', async (req, res) => {
+  const me = currentUser(req);
+  if (!aiEnabled()) throw conflict(AI_OFF, 'AI_DISABLED');
+  const answer = await prisma.answer.findUnique({ where: { id: param(req, 'id') }, select: { id: true, attemptId: true } });
+  if (!answer) throw notFound('Answer not found');
+  await loadAttemptForStaff(me, answer.attemptId);
+  const { force } = parseBody(z.object({ force: z.boolean().default(false) }), req);
+  try {
+    const s = await suggestForAnswer(answer.id, me.id, force);
+    audit(me.id, 'ai.suggest', 'Answer', answer.id, { suggestion: s.id, status: s.status, score: s.score, model: s.model });
+    res.json({ suggestion: serialize(s) });
+  } catch (e) {
+    if (e instanceof AiInputError) throw badRequest(e.message);
+    throw e;
+  }
+});
+
+staffRouter.get('/exams/:id/ai/status', async (req, res) => {
+  const exam = await loadExamForStaff(currentUser(req), param(req, 'id'));
+  res.json({ enabled: aiEnabled(), model: aiConfig.model, job: jobStatus(exam.id) });
+});
+
+staffRouter.post('/exams/:id/ai/batch', async (req, res) => {
+  const me = currentUser(req);
+  const exam = await loadExamForStaff(me, param(req, 'id'));
+  if (!aiEnabled()) throw conflict(AI_OFF, 'AI_DISABLED');
+  const body = parseBody(z.object({ questionId: z.string().max(64).nullable().optional(), includeGraded: z.boolean().default(false), force: z.boolean().default(false), dryRun: z.boolean().default(false) }), req);
+  const opts = { includeGraded: body.includeGraded, force: body.force };
+  if (body.dryRun) return res.json({ count: Math.min(aiConfig.maxBatch, (await batchCandidates(exam.id, body.questionId ?? null, opts)).length), max: aiConfig.maxBatch });
+  try {
+    const r = await startBatch(exam.id, body.questionId ?? null, me.id, opts);
+    audit(me.id, 'ai.batch', 'Exam', exam.id, { questionId: body.questionId ?? null, queued: r.queued ?? 0, model: aiConfig.model });
+    res.status(r.started ? 202 : 200).json(r);
+  } catch (e) {
+    if (e instanceof AiInputError) throw badRequest(e.message);
+    throw e;
+  }
+});
+
+staffRouter.post('/exams/:id/ai/cancel', async (req, res) => {
+  const exam = await loadExamForStaff(currentUser(req), param(req, 'id'));
+  cancelJob(exam.id);
+  res.json({ job: jobStatus(exam.id) });
+});
+
+staffRouter.get('/exams/:id/ai/consistency', async (req, res) => {
+  const exam = await loadExamForStaff(currentUser(req), param(req, 'id'));
+  res.json(await consistencyReport(exam.id));
 });
 
 /* ------------------------------------- results ----------------------------------- */

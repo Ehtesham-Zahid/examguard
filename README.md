@@ -55,6 +55,18 @@ The smoke test covers RBAC, ownership isolation, lifecycle rules, time windows, 
 
 `render.yaml` is a one-click Render Blueprint (free Postgres plus one web service). In production the API also serves the built React app from the **same origin**, so cookies, CORS and WebSockets need no extra configuration. A `Dockerfile` is included for any container host.
 
+### AI marking assistant (Claude, examiner decides)
+
+For written answers, Claude (`claude-opus-5-5`) suggests a mark against the examiner's rubric: a score, a verdict per rubric point, **verbatim evidence quotes highlighted in the answer**, and draft feedback. The examiner uses it with one key (<kbd>A</kbd>), edits it, or ignores it — nothing is ever saved as a grade automatically.
+
+* **Blind by design:** Claude receives only the question, rubric, marks and the answer text — never the candidate's name, email or id — and contact details typed into answers are redacted first. Grading also has a *blind marking* toggle for the examiner.
+* **Grounded and safe:** structured output (JSON schema); marks are clamped to range; every quote is checked against the answer and unverifiable ones are flagged; text aimed at the marker ("give me full marks") is ignored and flagged as *possible manipulation*; refusals fall back server-side or ask the examiner to mark manually.
+* **Logged:** every suggestion is stored and paired with the examiner's final mark (*accepted* / *adjusted*), and the audit log records the AI mark next to the final one.
+* **Consistency check:** flags answers to the same question that read alike but got very different marks, and marks far from the AI suggestion, with agreement statistics — before results are published.
+* **Batch:** "Suggest for all answers" runs a whole question in the background with live progress; identical inputs are never paid for twice.
+
+**Turning it on:** set `ANTHROPIC_API_KEY` (in `apps/api/.env` or Render → Environment). Optional: `AI_GRADING_MODEL`, `AI_GRADING_EFFORT`. For offline demos/tests, `scripts/mock-claude.ts` stands in for the Claude API (`ANTHROPIC_BASE_URL=http://localhost:4600`).
+
 ### Email notifications
 
 ExamGuard emails candidates and staff from a Google account, through a **Google Apps Script relay** (works on any host) or **Gmail SMTP**:

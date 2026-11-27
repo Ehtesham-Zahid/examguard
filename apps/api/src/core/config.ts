@@ -38,4 +38,14 @@ export const config = {
 /** 'relay' (Google Apps Script over HTTPS) wins over 'smtp' when both are set. */
 export const emailMode = (): 'relay' | 'smtp' | null =>
   config.email.disabled ? null : config.email.relayUrl && config.email.relaySecret ? 'relay' : config.email.user && config.email.pass ? 'smtp' : null;
+/** AI marking assistant (Claude). Off until ANTHROPIC_API_KEY is set; the SDK also honours ANTHROPIC_BASE_URL. */
+export const aiConfig = {
+  apiKey: (process.env.ANTHROPIC_API_KEY ?? '').trim(),
+  model: (process.env.AI_GRADING_MODEL ?? '').trim() || 'claude-opus-5-5',
+  effort: (['low', 'medium', 'high', 'xhigh', 'max'].includes(process.env.AI_GRADING_EFFORT ?? '') ? process.env.AI_GRADING_EFFORT : 'medium') as 'low' | 'medium' | 'high' | 'xhigh' | 'max',
+  maxBatch: Number(process.env.AI_GRADING_MAX_BATCH ?? 300),
+  concurrency: Math.max(1, Math.min(8, Number(process.env.AI_GRADING_CONCURRENCY ?? 3))),
+};
+export const aiEnabled = () => aiConfig.apiKey.length > 0;
+
 export const emailConfigured = () => emailMode() !== null;

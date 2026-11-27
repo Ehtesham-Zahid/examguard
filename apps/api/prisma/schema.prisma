@@ -297,6 +297,8 @@ model Answer {
   feedback          String?
   gradedById        String?
   gradedAt          DateTime?
+
+  aiSuggestions AiGradeSuggestion[]
 }
 
 model AttemptEvent {
@@ -476,4 +478,47 @@ model PasswordToken {
   createdAt DateTime  @default(now())
 
   @@index([userId])
+}
+
+/// AI marking assistant: every suggestion Claude makes, kept next to the examiner's final mark (audit + agreement stats).
+/// Built only from the question, rubric, marks and the answer text — never the candidate's identity.
+model AiGradeSuggestion {
+  id            String              @id @default(cuid())
+  answerId      String
+  answer        Answer              @relation(fields: [answerId], references: [id], onDelete: Cascade)
+  examId        String
+  status        AiSuggestionStatus  @default(READY)
+  model         String
+  score         Float?
+  maxScore      Float
+  confidence    String?
+  summary       String?
+  criteria      Json                @default("[]") // [{criterion, verdict: met|partial|missed, comment}]
+  evidence      Json                @default("[]") // [{quote, supports, verified}]
+  feedbackDraft String?
+  flags         Json                @default("[]") // e.g. possible_manipulation, blank_or_off_topic
+  error         String?
+  inputHash     String
+  requestedById String
+  decision      AiDecision?
+  finalScore    Float?
+  decidedById   String?
+  decidedAt     DateTime?
+  latencyMs     Int?
+  inputTokens   Int?
+  outputTokens  Int?
+  createdAt     DateTime            @default(now())
+
+  @@index([answerId, createdAt])
+  @@index([examId])
+}
+
+enum AiSuggestionStatus {
+  READY
+  FAILED
+}
+
+enum AiDecision {
+  ACCEPTED
+  ADJUSTED
 }

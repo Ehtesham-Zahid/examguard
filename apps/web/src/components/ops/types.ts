@@ -161,7 +161,45 @@ export interface AttemptDetail {
   disputes: { id: string; status: string; category: string; message: string; attemptQuestionId: string | null }[];
 }
 
+export interface AiCriterion {
+  criterion: string;
+  verdict: 'met' | 'partial' | 'missed';
+  comment: string;
+}
+export interface AiEvidence {
+  quote: string;
+  supports: string;
+  verified: boolean;
+}
+export type AiFlag = 'blank_or_off_topic' | 'possible_manipulation' | 'rubric_unclear' | 'needs_human_review';
+export interface AiSuggestion {
+  id: string;
+  status: 'READY' | 'FAILED';
+  score: number | null;
+  maxScore: number;
+  confidence: 'high' | 'medium' | 'low' | null;
+  summary: string | null;
+  criteria: AiCriterion[];
+  evidence: AiEvidence[];
+  feedback: string | null;
+  flags: AiFlag[];
+  error: string | null;
+  model: string;
+  createdAt: string;
+  decision: 'ACCEPTED' | 'ADJUSTED' | null;
+  finalScore: number | null;
+  stale: boolean;
+}
+export interface AiJob {
+  questionId: string | null;
+  total: number;
+  done: number;
+  failed: number;
+  running: boolean;
+  lastError: string | null;
+}
 export interface GradingItem {
+  ai?: AiSuggestion;
   answerId?: string;
   attemptId: string;
   candidate: string;
@@ -182,6 +220,7 @@ export interface GradingGroup {
 export interface GradingData {
   groups: GradingGroup[];
   progress: { total: number; done: number };
+  ai?: { enabled: boolean; model: string; job: AiJob | null };
 }
 
 export interface SummaryStats {
