@@ -27,7 +27,7 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 );
 
-// the first-visit loader (index.html) lifts away once the app has painted
+// the landing-page splash (index.html + public/splash.js) lifts away once the app has painted
 declare global {
   interface Window {
     __hideSplash?: () => void;

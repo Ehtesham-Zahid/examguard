@@ -11,7 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Familjen+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;600;700&family=Lexend:wght@400;600&family=Source+Serif+4:wght@400;600&display=swap" rel="stylesheet" />
     <title>Examify</title>
     <style>
-      /* First-visit loader (once per browser session, never inside a running exam). Pure CSS so it paints before the app loads. */
+      /* Landing-page splash (only on "/"; every other page uses the small loader). Pure CSS so it paints before the app loads. */
       #splash{display:none}
       html.splash-on body{overflow:hidden}
       html.splash-on #splash{display:grid}
@@ -34,7 +34,7 @@
       #splash .check{stroke-dasharray:40;stroke-dashoffset:40;animation:sp-draw .6s .35s ease-out forwards}
       #splash .tag{font:700 13px/1 'JetBrains Mono',ui-monospace,monospace;letter-spacing:.26em;text-transform:uppercase;color:#5a6a84}
       #splash .bar{position:relative;width:320px;height:10px;border:2px solid #172a46;border-radius:99px;overflow:hidden;background:#fff}
-      #splash .bar b{position:absolute;inset:0 auto 0 0;width:0;background:#172a46;border-radius:99px;animation:sp-load 1.7s .2s cubic-bezier(.3,.6,.3,1) forwards}
+      #splash .bar b{position:absolute;inset:0 auto 0 0;width:0;background:#172a46;border-radius:99px;animation:sp-load 4.2s .2s cubic-bezier(.3,.6,.3,1) forwards}
       html.splash-done #splash .bar b{width:100%!important;transition:width .25s ease}
       html.splash-out #splash{transform:translateY(-100%);opacity:.6}
       html.splash-out #splash .card{animation:none;transform:scale(.97);transition:transform .5s ease}
