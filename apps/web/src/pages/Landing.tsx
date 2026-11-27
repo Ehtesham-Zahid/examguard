@@ -36,6 +36,7 @@ import { useAuth } from '@/lib/auth';
 import { cx } from '@/components/ui';
 import { Logo } from '@/layouts/AppShell';
 import { useThemeMode } from '@/lib/theme';
+import { useSmoothScroll } from '@/lib/smoothScroll';
 import CursorGrid from '@/components/bits/CursorGrid';
 import RotatingText from '@/components/bits/RotatingText';
 import CountUp from '@/components/bits/CountUp';
@@ -618,6 +619,7 @@ function Footer() {
 }
 
 export default function Landing() {
+  useSmoothScroll();
   useEffect(() => {
     document.title = 'ExamGuard: fair, secure, offline-proof online exams';
     return () => {
