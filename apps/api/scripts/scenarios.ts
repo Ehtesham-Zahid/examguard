@@ -208,6 +208,20 @@ async function main() {
     ok((await call('POST', `/candidate/exams/${id2}/start`, s, {}, dev('K'))).status === 403, 'late entry closed after cutoff');
   }
 
+  // ---------- 9b. "no going back" is enforced by the server, not just the UI
+  {
+    const id = await newLiveExam(examiner, 'S9b no back nav', { allowBackNav: false, shuffleQuestions: false });
+    const s = await login('student8@examguard.test');
+    const a = (await call('POST', `/candidate/exams/${id}/start`, s, {}, dev('NB'))).json.attemptId;
+    const qs = (await call('GET', `/candidate/attempts/${a}`, s, undefined, dev('NB'))).json.questions;
+    await call('PUT', `/candidate/attempts/${a}/answers`, s, { items: [{ questionId: qs[0].id, response: [qs[0].options[0].id], visited: true, seq: 1 }] }, dev('NB'));
+    await call('PUT', `/candidate/attempts/${a}/answers`, s, { items: [{ questionId: qs[2].id, response: [qs[2].options[0].id], visited: true, seq: 2 }] }, dev('NB'));
+    const back = await call('PUT', `/candidate/attempts/${a}/answers`, s, { items: [{ questionId: qs[0].id, response: [qs[0].options[1].id], visited: true, seq: 3 }] }, dev('NB'));
+    ok(back.json.rejected?.[0]?.reason === 'back_navigation_disabled', 'changing an earlier answer is rejected when back navigation is off');
+    const same = await call('PUT', `/candidate/attempts/${a}/answers`, s, { items: [{ questionId: qs[0].id, response: [qs[0].options[0].id], visited: true, timeSpentMs: 5000, seq: 4 }] }, dev('NB'));
+    ok(same.json.accepted?.length === 1, 'resending the unchanged earlier answer (e.g. time tracking) is still accepted');
+  }
+
   // ---------- 10. blueprint papers differ but follow the blueprint
   {
     const exams = (await call('GET', '/exams', examiner)).json as any[];

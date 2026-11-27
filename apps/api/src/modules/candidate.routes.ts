@@ -231,7 +231,11 @@ candidateRouter.put('/attempts/:id/answers', async (req, res) => {
   const lastContact = attempt.lastHeartbeatAt?.getTime() ?? attempt.startedAt.getTime();
   const gap = await registerContact(attempt);
 
-  const aqIds = new Set((await prisma.attemptQuestion.findMany({ where: { attemptId: attempt.id }, select: { id: true } })).map((x) => x.id));
+  const aqRows = await prisma.attemptQuestion.findMany({ where: { attemptId: attempt.id }, select: { id: true, position: true, answer: { select: { visited: true } } } });
+  const aqIds = new Set(aqRows.map((x) => x.id));
+  const positionOf = new Map(aqRows.map((x) => [x.id, x.position]));
+  // "no going back": answers to questions before the furthest one already visited are frozen
+  const furthestVisited = s.allowBackNav ? 0 : Math.max(0, ...aqRows.filter((x) => x.answer?.visited).map((x) => x.position));
   const accepted: { questionId: string; seq: number }[] = [];
   const rejected: { questionId: string; seq: number; reason: string }[] = [];
   let offlineAccepted = 0;
@@ -241,6 +245,13 @@ candidateRouter.put('/attempts/:id/answers', async (req, res) => {
     if (!aqIds.has(it.questionId)) {
       rejected.push({ questionId: it.questionId, seq: it.seq, reason: 'unknown_question' });
       continue;
+    }
+    if (!s.allowBackNav && it.response !== undefined && (positionOf.get(it.questionId) ?? 0) < furthestVisited) {
+      const prev = await prisma.answer.findUnique({ where: { attemptQuestionId: it.questionId }, select: { response: true } });
+      if (JSON.stringify(prev?.response ?? null) !== JSON.stringify(it.response)) {
+        rejected.push({ questionId: it.questionId, seq: it.seq, reason: 'back_navigation_disabled' });
+        continue;
+      }
     }
     if (!inTime) {
       // late-arriving work is only accepted if it was provably produced offline before the deadline

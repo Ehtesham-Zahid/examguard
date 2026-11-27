@@ -119,6 +119,7 @@ export function EditUserModal({ user, onClose, isSelf }: { user: UserRow | null;
     onSuccess: () => {
       toast.success('User updated');
       qc.invalidateQueries({ queryKey: ['users'] });
+      qc.invalidateQueries({ queryKey: ['admin-overview'] });
       qc.invalidateQueries({ queryKey: ['groups'] });
       onClose();
     },

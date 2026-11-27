@@ -88,7 +88,7 @@ function validate(f: FormState) {
   if (!(marks > 0)) e.marks = 'Marks must be greater than 0';
   else if (marks > 100) e.marks = 'At most 100';
   if (Number.isNaN(neg) || neg < 0) e.negativeMarks = 'Must be 0 or more';
-  else if (marks > 0 && neg > marks) e.negativeMarks = 'Cannot exceed the question marks';
+  else if (f.type !== 'WRITTEN' && marks > 0 && neg > marks) e.negativeMarks = 'Cannot exceed the question marks';
   if (f.type !== 'WRITTEN') {
     if (f.options.length < 2) e.options = 'Objective questions need at least 2 options';
     else if (f.options.some((o) => !o.text.trim())) e.options = 'Option text cannot be empty';

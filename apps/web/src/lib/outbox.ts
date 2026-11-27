@@ -84,6 +84,15 @@ export async function dropRejected(attemptId: string, questionIds: string[]) {
   }
 }
 
+/** After a network failure, everything still queued counts as offline work (eligible for the post-deadline merge). */
+export async function markPendingOffline(attemptId: string) {
+  try {
+    await db.outbox.where('attemptId').equals(attemptId).modify({ offline: true });
+  } catch {
+    memoryOutbox.forEach((v) => v.attemptId === attemptId && (v.offline = true));
+  }
+}
+
 export const saveSnapshot = (attemptId: string, data: unknown) => db.snapshots.put({ attemptId, data, savedAt: Date.now() }).catch(() => null);
 export const loadSnapshot = (attemptId: string) => db.snapshots.get(attemptId).catch(() => undefined);
 export const clearAttempt = async (attemptId: string) => {

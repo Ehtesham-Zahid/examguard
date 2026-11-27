@@ -242,7 +242,7 @@ function BlueprintEditor({ exam, locked, onOpenFairness }: { exam: ExamDetail; l
 
   const avail = useMemo(() => {
     const m = new Map<string, number>();
-    bank.data?.forEach((q) => m.set(`${q.topicId}:${q.difficulty}`, (m.get(`${q.topicId}:${q.difficulty}`) ?? 0) + 1));
+    bank.data?.filter((q) => q.ownerId === exam.ownerId).forEach((q) => m.set(`${q.topicId}:${q.difficulty}`, (m.get(`${q.topicId}:${q.difficulty}`) ?? 0) + 1));
     return m;
   }, [bank.data]);
 

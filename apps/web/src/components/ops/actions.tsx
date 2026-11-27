@@ -17,6 +17,7 @@ export function useInvalidateOps() {
     qc.invalidateQueries({ queryKey: ['monitor'] });
     qc.invalidateQueries({ queryKey: ['attempt'] });
     qc.invalidateQueries({ queryKey: ['results'] });
+    qc.invalidateQueries({ queryKey: ['analytics'] });
   };
 }
 

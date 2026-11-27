@@ -20,7 +20,7 @@ interface Lobby {
 export default function ExamLobby() {
   const { id = '' } = useParams();
   const nav = useNavigate();
-  const { data, isLoading, error, refetch } = useQuery({ queryKey: ['lobby', id], queryFn: () => api<Lobby>(`/candidate/exams/${id}`), refetchInterval: 15000 });
+  const { data, isLoading, error, refetch, dataUpdatedAt } = useQuery({ queryKey: ['lobby', id], queryFn: () => api<Lobby>(`/candidate/exams/${id}`), refetchInterval: 15000 });
   const [code, setCode] = useState('');
   const [agree, setAgree] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -51,7 +51,7 @@ export default function ExamLobby() {
   if (isLoading) return <Spinner />;
   if (error || !data) return <ErrorBox error={error} onRetry={refetch} />;
   const { exam, attempt } = data;
-  const offset = new Date(data.serverNow).getTime() - Date.now();
+  const offset = new Date(data.serverNow).getTime() - dataUpdatedAt; // fixed at fetch time so the countdown ticks smoothly
   const opensIn = new Date(exam.windowStart).getTime() - (now + offset);
   const resuming = attempt?.status === 'IN_PROGRESS';
   const finished = attempt && attempt.status !== 'IN_PROGRESS';

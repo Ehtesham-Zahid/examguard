@@ -11,7 +11,8 @@ export function getSocket() {
     reconnectionDelayMax: 5000,
   });
   socket.on('connect_error', async (err) => {
-    if (err.message === 'unauthorized') await refreshAccessToken();
+    // socket.io does not retry after a server-side rejection: refresh the token and reconnect ourselves
+    if (err.message === 'unauthorized' && (await refreshAccessToken())) setTimeout(() => socket?.connect(), 500);
   });
   return socket;
 }

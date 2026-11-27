@@ -121,7 +121,7 @@ const prefsSchema = z
   .object({
     theme: z.enum(['light', 'dark', 'contrast', 'system']).optional(),
     fontSize: z.number().int().min(12).max(26).optional(),
-    font: z.enum(['default', 'dyslexic', 'serif', 'mono']).optional(),
+    font: z.enum(['default', 'legible', 'dyslexic', 'serif', 'mono']).optional(),
     lineHeight: z.number().min(1.2).max(2.2).optional(),
     paletteSide: z.enum(['left', 'right', 'hidden']).optional(),
     layout: z.enum(['single', 'scroll']).optional(),

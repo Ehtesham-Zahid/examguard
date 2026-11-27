@@ -40,9 +40,9 @@ function useTick(ms = 1000) {
 export default function CandidateDashboard() {
   const { user } = useAuth();
   const [tab, setTab] = useState<'available' | 'upcoming' | 'completed'>('available');
-  const { data, isLoading, error, refetch } = useQuery({ queryKey: ['candidate-exams'], queryFn: () => api<{ serverNow: string; items: CandidateExam[] }>('/candidate/exams'), refetchInterval: 30000 });
+  const { data, isLoading, error, refetch, dataUpdatedAt } = useQuery({ queryKey: ['candidate-exams'], queryFn: () => api<{ serverNow: string; items: CandidateExam[] }>('/candidate/exams'), refetchInterval: 30000 });
   const now = useTick();
-  const offset = data ? new Date(data.serverNow).getTime() - Date.now() : 0;
+  const offset = data ? new Date(data.serverNow).getTime() - dataUpdatedAt : 0;
   const items = data?.items ?? [];
   const by = (c: string) => items.filter((i) => i.category === c);
   useEffect(() => {

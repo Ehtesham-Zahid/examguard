@@ -85,6 +85,7 @@ export interface ExamQuestionItem {
 }
 
 export interface ExamDetail extends ExamBase {
+  ownerId: string;
   accessCode: string | null;
   settings: ExamSettings;
   questions: ExamQuestionItem[];

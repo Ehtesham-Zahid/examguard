@@ -6,7 +6,7 @@ import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { serverNow, syncClock } from '@/lib/clock';
 import { fmtDuration, fmtTime } from '@/lib/format';
-import { acknowledge, clearAttempt, dropRejected, loadSnapshot, nextSeq, pendingFor, queueAnswer, saveSnapshot } from '@/lib/outbox';
+import { acknowledge, clearAttempt, db, dropRejected, loadSnapshot, markPendingOffline, nextSeq, pendingFor, queueAnswer, saveSnapshot } from '@/lib/outbox';
 import { getSessionId, sessionHeaders } from '@/lib/session';
 import { getSocket } from '@/lib/socket';
 import { localPrefs } from '@/lib/theme';
@@ -60,7 +60,7 @@ export default function ExamWorkspace() {
 
   const flushing = useRef(false);
   const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const eventQueue = useRef<{ type: string; at: number; details?: string }[]>([]);
+  const eventQueue = useRef<{ type: string; at: number; details?: string; id?: number }[]>([]);
   const enteredAt = useRef(performance.now());
   const answeredFast = useRef(0);
   const warned = useRef(new Set<number>());
@@ -70,6 +70,12 @@ export default function ExamWorkspace() {
   const answersRef = useRef(answers);
   answersRef.current = answers;
   const lastSeqFloor = useRef(0);
+  const autoSubmitted = useRef(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const currentRef = useRef(current);
+  currentRef.current = current;
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
 
   const sandbox = !!data?.attempt.isSandbox;
   const settings = data?.exam.settings;
@@ -116,8 +122,16 @@ export default function ExamWorkspace() {
     setPaused(d.exam.paused);
     setViolations(d.attempt.violationCount);
     setAnnouncements(d.announcements);
-    const firstUnvisited = d.questions.findIndex((q) => !base[q.id]?.visited);
-    setCurrent(d.exam.settings.allowBackNav ? 0 : Math.max(0, firstUnvisited));
+    let furthest = 0;
+    d.questions.forEach((q, i) => base[q.id]?.visited && (furthest = i));
+    setCurrent(d.exam.settings.allowBackNav ? 0 : furthest);
+    // integrity events recorded before a reload/offline period are kept on the device and re-sent
+    try {
+      const saved = await db.events.where('attemptId').equals(d.attempt.id).toArray();
+      eventQueue.current.push(...saved.map((e) => ({ type: e.type, at: e.at, details: e.details, id: e.id })));
+    } catch {
+      /* IndexedDB unavailable */
+    }
     if (d.attempt.status !== 'IN_PROGRESS') {
       setFinish({ status: d.attempt.status, at: Date.now() });
       return setScreen('done');
@@ -174,7 +188,8 @@ export default function ExamWorkspace() {
         else if (e.isNetwork) {
           failures.current++;
           setNet(navigator.onLine ? 'unstable' : 'offline');
-        }
+          await markPendingOffline(attemptId);
+        } else if (e.status === 400) toast.error(`An answer could not be saved: ${e.message}`);
       }
       setSave('queued');
       return false;
@@ -205,7 +220,7 @@ export default function ExamWorkspace() {
         timeSpentMs: Math.round(merged.timeSpentMs ?? 0),
         seq: nextSeq(attemptId, lastSeqFloor.current),
         offline,
-        claimedAt: offline ? Math.round(serverNow()) : undefined,
+        claimedAt: Math.round(serverNow()),
       });
       setPending((p) => Math.max(p, 1));
       setSave(offline ? 'queued' : 'saving');
@@ -244,7 +259,7 @@ export default function ExamWorkspace() {
         const r = await api<{ serverNow: number; status: string; deadline: string; paused: boolean }>(`/candidate/attempts/${attemptId}/heartbeat`, {
           method: 'POST',
           headers: sessionHeaders(),
-          body: { currentQuestion: current + 1, answered: Object.values(answersRef.current).filter(isAnswered).length, online: true },
+          body: { currentQuestion: currentRef.current + 1, answered: Object.values(answersRef.current).filter(isAnswered).length, online: true },
           timeoutMs: 8000,
         });
         syncClock(r.serverNow, performance.now() - t0);
@@ -265,7 +280,7 @@ export default function ExamWorkspace() {
     beat();
     const iv = setInterval(beat, 15000);
     return () => clearInterval(iv);
-  }, [screen, attemptId, current]);
+  }, [screen, attemptId]);
 
   // timer tick (display only — the server enforces the deadline)
   useEffect(() => {
@@ -304,6 +319,7 @@ export default function ExamWorkspace() {
       setLiveMsg('The exam has been paused by the examiner. Your timer is frozen.');
     };
     const onResume = (p: { addedSec: number }) => {
+      setDeadline((d) => d + p.addedSec * 1000);
       setPaused(false);
       toast.success(`Exam resumed — ${Math.round(p.addedSec / 60)} min added back to your timer`);
     };
@@ -346,7 +362,8 @@ export default function ExamWorkspace() {
     if (!eventQueue.current.length) return;
     const batch = eventQueue.current.splice(0, 50);
     try {
-      const r = await api<{ violations: number; warnings: number; maxViolations: number; submitted: boolean }>(`/candidate/attempts/${attemptId}/events`, { method: 'POST', headers: sessionHeaders(), body: { events: batch } });
+      const r = await api<{ violations: number; warnings: number; maxViolations: number; submitted: boolean }>(`/candidate/attempts/${attemptId}/events`, { method: 'POST', headers: sessionHeaders(), body: { events: batch.map(({ id: _id, ...e }) => e) } });
+      await db.events.bulkDelete(batch.map((e) => e.id).filter((x): x is number => typeof x === 'number')).catch(() => null);
       setViolations(r.violations);
       if (r.submitted) {
         await clearAttempt(attemptId);
@@ -362,14 +379,16 @@ export default function ExamWorkspace() {
 
   const onSignal = useCallback(
     async (s: Signal, details?: string) => {
-      if (screenRef.current !== 'exam') return;
-      eventQueue.current.push({ type: s, at: Date.now(), details });
+      if (screenRef.current !== 'exam' || pausedRef.current) return; // nothing is counted while the exam is paused
+      const ev = { type: s, at: Date.now(), details };
+      const id = await db.events.add({ attemptId, ...ev }).catch(() => undefined);
+      eventQueue.current.push({ ...ev, id: typeof id === 'number' ? id : undefined });
       if (!isCounted(s)) return;
       const r = await flushEvents();
       const max = data?.exam.settings.maxViolations ?? 0;
       if (SIGNAL_TEXT[s]) setWarning({ text: SIGNAL_TEXT[s]!, left: r ? r.warnings : Math.max(0, max - violations - 1) });
     },
-    [flushEvents, data, violations],
+    [flushEvents, data, violations, attemptId],
   );
   useEffect(() => {
     const iv = setInterval(flushEvents, 4000);
@@ -423,7 +442,8 @@ export default function ExamWorkspace() {
     const h = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
       if (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT' || e.metaKey || e.ctrlKey || e.altKey) return;
-      if (reviewOpen || prefsOpen || helpOpen) return;
+      if (reviewOpen || prefsOpen || helpOpen || scratchOpen || warning || paletteOpen) return;
+      if ((e.key === 'ArrowRight' || e.key === 'ArrowLeft') && t.closest('[role="radio"],[role="checkbox"],button')) return;
       const q = questions[current];
       if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'n') go(current + 1);
       else if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'p') go(current - 1);
@@ -439,7 +459,7 @@ export default function ExamWorkspace() {
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
-  }, [screen, questions, current, go, persist, answer, reviewOpen, prefsOpen, helpOpen]);
+  }, [screen, questions, current, go, persist, answer, reviewOpen, prefsOpen, helpOpen, scratchOpen, warning, paletteOpen]);
 
   // warn before leaving with unsynced work
   useEffect(() => {
@@ -456,6 +476,10 @@ export default function ExamWorkspace() {
   /* ------------------------------ submit ------------------------------ */
   const submit = useCallback(
     async (auto = false) => {
+      if (auto) {
+        if (autoSubmitted.current) return;
+        autoSubmitted.current = true;
+      }
       setReviewOpen(false);
       setScreen('finishing');
       commitTime();
@@ -466,6 +490,11 @@ export default function ExamWorkspace() {
       }
       await flushEvents();
       const left = await pendingFor(attemptId);
+      if (left.length && !auto) {
+        toast.error(`${left.length} answer(s) haven't reached the server yet. Check your connection — we'll keep retrying, and you can submit once they're saved.`);
+        setScreen('exam');
+        return;
+      }
       if (left.length && auto) {
         // offline at expiry: keep the answers locally; they are merged if they reach the server within 10 minutes
         setFinish({ status: 'PENDING_SYNC', at: Date.now() });
@@ -485,8 +514,15 @@ export default function ExamWorkspace() {
         setScreen('done');
         document.exitFullscreen?.().catch(() => null);
       } catch (e) {
-        if (e instanceof ApiError && (e.code === 'ALREADY_SUBMITTED' || e.status === 409)) {
+        if (e instanceof ApiError && e.code === 'ALREADY_SUBMITTED') {
           setFinish({ status: 'SUBMITTED', at: Date.now() });
+          setScreen('done');
+          return;
+        }
+        if (e instanceof ApiError && e.code === 'SESSION_LOCKED') return setScreen('locked');
+        if (auto) {
+          // offline at expiry with everything saved: the server finalises the attempt on its own
+          setFinish({ status: 'AUTO_SUBMITTED', at: Date.now(), reason: 'time_expired' });
           setScreen('done');
           return;
         }
@@ -585,7 +621,7 @@ export default function ExamWorkspace() {
         <li className="flex items-center gap-2"><span className="size-3 rounded-full bg-warn" /> Marked for review</li>
       </ul>
       <div className="mt-auto pt-4">
-        <Button className="w-full" onClick={() => { commitTime(); setReviewOpen(true); }} icon={<ClipboardList className="size-4" />}>Review & submit</Button>
+        <Button className="w-full" onClick={() => { commitTime(); setPaletteOpen(false); setReviewOpen(true); }} icon={<ClipboardList className="size-4" />}>Review & submit</Button>
       </div>
     </nav>
   );
@@ -632,7 +668,7 @@ export default function ExamWorkspace() {
         </div>
       )}
 
-      <div className={cx('flex min-h-0 flex-1', paletteSide === 'right' && 'flex-row-reverse')}>
+      <div inert={screen === 'gate' || (screen === 'exam' && !!settings?.requireFullscreen && document.fullscreenEnabled && !isFullscreen)} className={cx('flex min-h-0 flex-1', paletteSide === 'right' && 'flex-row-reverse')}>
         {paletteSide !== 'hidden' && <aside className="hidden w-[260px] shrink-0 border-line bg-surface p-4 md:block md:border-r">{palette}</aside>}
         <main id="exam-main" className="relative min-w-0 flex-1 overflow-y-auto">
           <Watermark text={watermark} />
@@ -662,7 +698,7 @@ export default function ExamWorkspace() {
           </div>
           <div className="h-1.5 overflow-hidden rounded-full bg-surface-2"><div className="h-full rounded-full bg-accent transition-all" style={{ width: `${(stats.answered / Math.max(1, questions.length)) * 100}%` }} /></div>
         </div>
-        <Button variant="outline" className="md:hidden" onClick={() => { commitTime(); setReviewOpen(true); }}>Review</Button>
+        <Button variant="outline" className="md:hidden" onClick={() => setPaletteOpen(true)}>Questions</Button>
         {current < questions.length - 1 && layout === 'single' ? (
           <Button onClick={() => go(current + 1)} icon={<ArrowRight className="size-4" />} className="flex-row-reverse">
             <span className="hidden sm:inline">Next</span>
@@ -765,6 +801,11 @@ export default function ExamWorkspace() {
       <Modal open={prefsOpen} onClose={() => setPrefsOpen(false)} title="Display settings" description="Saved to your profile and remembered for future exams.">
         <PreferenceControls prefs={prefs} onChange={updateLocalPrefs} compact />
       </Modal>
+      <Modal open={paletteOpen} onClose={() => setPaletteOpen(false)} title="Questions" size="sm">
+        <div className="h-[60vh]" onClick={(e) => (e.target as HTMLElement).closest('ol button') && setPaletteOpen(false)}>
+          {palette}
+        </div>
+      </Modal>
       <Modal open={helpOpen} onClose={() => setHelpOpen(false)} title="Keyboard shortcuts" size="sm">
         <ul className="space-y-2.5 text-sm">
           {[
@@ -813,9 +854,9 @@ function ConnectionPill({ net, save, pending, lastSavedAt }: { net: Net; save: S
             ? { icon: <Cloud className="size-3.5" />, text: `${pending} pending`, tone: 'bg-warn-soft text-warn' }
             : { icon: <CheckCircle2 className="size-3.5" />, text: since !== null && since < 60 ? 'All changes saved' : 'Saved', tone: 'bg-ok-soft text-ok' };
   return (
-    <span role="status" aria-live="polite" className={cx('hidden items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium sm:inline-flex', cfg.tone)}>
+    <span role="status" aria-live="polite" aria-label={cfg.text} title={cfg.text} className={cx('inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-medium sm:px-2.5', cfg.tone)}>
       {cfg.icon}
-      {cfg.text}
+      <span className="hidden sm:inline">{cfg.text}</span>
     </span>
   );
 }

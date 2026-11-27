@@ -95,6 +95,7 @@ export function Scratchpad({ open, onClose, initial, onSave }: { open: boolean; 
     <aside
       aria-label="Scratchpad"
       aria-hidden={!open}
+      inert={!open}
       className={cx('fixed inset-y-0 right-0 z-40 flex w-full max-w-[460px] flex-col border-l border-line bg-surface shadow-2xl transition-transform duration-200', open ? 'translate-x-0' : 'pointer-events-none translate-x-full')}
     >
       <div className="flex items-center justify-between border-b border-line px-4 py-3">

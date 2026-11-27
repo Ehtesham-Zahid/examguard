@@ -112,6 +112,7 @@ export default function Grading() {
         return { groups, progress: { ...old.progress, done: old.progress.done + newlyDone } };
       });
       qc.invalidateQueries({ queryKey: ['results'] });
+      qc.invalidateQueries({ queryKey: ['analytics'] });
       qc.invalidateQueries({ queryKey: ['attempt'] });
       toast.success(`Saved ${v.score}/${item?.marks}`, { duration: 1500 });
       next();
@@ -129,7 +130,7 @@ export default function Grading() {
     save.mutate({ answerId: item.answerId, score: Number(score), feedback: feedback.trim() });
   };
 
-  useHotkeys({ j: next, k: prev, n: nextUngraded, Enter: (e) => !(e.target as HTMLElement).closest('button,a') && submit(), '0': () => item && setScore('0'), h: () => item && setScore(String(item.marks / 2)), f: () => item && setScore(String(item.marks)) });
+  useHotkeys({ j: next, k: prev, n: nextUngraded, Enter: (e) => !(e.target as HTMLElement).closest('button,a') && submit(), '0': () => item && setScore('0'), h: () => item && setScore(String(Math.round((item.marks / 2) * 100) / 100)), f: () => item && setScore(String(item.marks)) });
 
   const progress = q.data?.progress ?? { total: 0, done: 0 };
   const complete = progress.total > 0 && progress.done >= progress.total;

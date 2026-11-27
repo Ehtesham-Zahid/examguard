@@ -180,7 +180,7 @@ export default function QuestionBank() {
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
                         <div className="min-w-0 flex-1">
                           <button type="button" onClick={() => setEditing(x)} className="block w-full text-left" disabled={x.archived}>
-                            <p className="line-clamp-2 text-[15px] leading-snug">{x.current.body.replace(/```[\s\S]*?```/g, ' [code] ')}</p>
+                            <p className="line-clamp-2 text-[15px] leading-snug">{x.current.body.replace(/```[\s\S]*?```/g, ' [code] ').replace(/`([^`]+)`/g, '$1').replace(/\*\*([^*]+)\*\*/g, '$1')}</p>
                           </button>
                           <div className="mt-2 flex flex-wrap items-center gap-1.5">
                             <Badge>{x.topic.name}</Badge>

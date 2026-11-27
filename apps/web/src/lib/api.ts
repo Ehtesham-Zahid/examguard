@@ -11,6 +11,7 @@ export class ApiError extends Error {
 
 let accessToken: string | null = null;
 let refreshing: Promise<string | null> | null = null;
+let lastRefreshRejected = false; // true only when the server said the session is invalid (not on network errors)
 let onLogout: (() => void) | null = null;
 
 export const setAccessToken = (t: string | null) => {
@@ -24,8 +25,14 @@ export const setLogoutHandler = (fn: () => void) => {
 export async function refreshAccessToken(): Promise<string | null> {
   if (!refreshing) {
     refreshing = fetch(`${API_BASE}/api/auth/refresh`, { method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ refreshToken: localStorage.getItem('eg_rt') ?? undefined }) })
-      .then(async (r) => (r.ok ? ((await r.json()) as { accessToken: string }).accessToken : null))
-      .catch(() => null)
+      .then(async (r) => {
+        lastRefreshRejected = r.status === 401;
+        return r.ok ? ((await r.json()) as { accessToken: string }).accessToken : null;
+      })
+      .catch(() => {
+        lastRefreshRejected = false;
+        return null;
+      })
       .finally(() => setTimeout(() => (refreshing = null), 0));
   }
   const t = await refreshing;
@@ -63,14 +70,22 @@ export async function api<T = unknown>(path: string, opts: RequestOpts = {}, ret
   if (res.status === 401 && !retried && !path.startsWith('/auth/login')) {
     const t = await refreshAccessToken();
     if (t) return api<T>(path, opts, true);
-    onLogout?.();
+    // only a definitive "session invalid" signs the user out — a flaky network mid-exam must not
+    if (lastRefreshRejected) onLogout?.();
+    else throw new ApiError(0, 'Cannot reach the server. Check your connection.', 'NETWORK');
   }
   if (opts.raw) {
     if (!res.ok) throw new ApiError(res.status, 'Download failed');
     return res as unknown as T;
   }
   const text = await res.text();
-  const json = text ? JSON.parse(text) : null;
+  let json: { error?: { message?: string; code?: string; details?: unknown } } | null = null;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    // non-JSON body (e.g. a proxy's HTML 502): treat 5xx as a connectivity problem
+    if (!res.ok) throw new ApiError(res.status >= 500 ? 0 : res.status, res.status >= 500 ? 'The server is temporarily unavailable.' : `Request failed (${res.status})`, res.status >= 500 ? 'NETWORK' : 'ERROR');
+  }
   if (!res.ok) throw new ApiError(res.status, json?.error?.message ?? `Request failed (${res.status})`, json?.error?.code, json?.error?.details);
   return json as T;
 }

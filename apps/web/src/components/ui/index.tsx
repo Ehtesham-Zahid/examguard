@@ -189,12 +189,17 @@ export function ErrorBox({ error, onRetry }: { error: unknown; onRetry?: () => v
 /* ------------------------------- Modal ------------------------------- */
 export function Modal({ open, onClose, title, description, children, footer, size = 'md', dismissable = true }: { open: boolean; onClose: () => void; title: ReactNode; description?: ReactNode; children?: ReactNode; footer?: ReactNode; size?: 'sm' | 'md' | 'lg' | 'xl'; dismissable?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
+  // keep the latest handlers in refs so parent re-renders (new onClose identity, ticking clocks) never re-run the focus effect
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const dismissRef = useRef(dismissable);
+  dismissRef.current = dismissable;
   useEffect(() => {
     if (!open) return;
     const prev = document.activeElement as HTMLElement | null;
-    const t = setTimeout(() => ref.current?.querySelector<HTMLElement>('input,textarea,select,button[data-autofocus],button')?.focus(), 20);
+    const t = setTimeout(() => (ref.current?.querySelector<HTMLElement>('[data-autofocus]') ?? ref.current?.querySelector<HTMLElement>('input,textarea,select,button'))?.focus(), 20);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && dismissable) onClose();
+      if (e.key === 'Escape' && dismissRef.current) onCloseRef.current();
       if (e.key === 'Tab' && ref.current) {
         const els = ref.current.querySelectorAll<HTMLElement>('button,input,select,textarea,a[href],[tabindex]:not([tabindex="-1"])');
         if (!els.length) return;
@@ -215,7 +220,7 @@ export function Modal({ open, onClose, title, description, children, footer, siz
       document.removeEventListener('keydown', onKey);
       prev?.focus?.();
     };
-  }, [open, onClose, dismissable]);
+  }, [open]);
   if (!open) return null;
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 p-0 backdrop-blur-[2px] sm:items-center sm:p-4" onMouseDown={(e) => dismissable && e.target === e.currentTarget && onClose()}>

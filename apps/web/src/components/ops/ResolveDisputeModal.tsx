@@ -71,6 +71,7 @@ export function ResolveDisputeModal({ dispute, onClose }: { dispute: Dispute | n
       });
       qc.invalidateQueries({ queryKey: ['disputes'] });
       qc.invalidateQueries({ queryKey: ['results'] });
+      qc.invalidateQueries({ queryKey: ['analytics'] });
       qc.invalidateQueries({ queryKey: ['attempt'] });
       close();
     },

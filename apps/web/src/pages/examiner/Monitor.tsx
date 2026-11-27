@@ -152,7 +152,7 @@ export default function Monitor() {
                 Pause
               </Button>
             ))}
-          {exam.status === 'PUBLISHED' && (
+          {exam.status === 'PUBLISHED' && Date.now() >= new Date(exam.windowStart).getTime() && (
             <Button variant="outline" className="text-danger hover:bg-danger-soft" onClick={() => setCloseOpen(true)} icon={<Square className="size-4" />}>
               Close exam
             </Button>

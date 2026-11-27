@@ -53,9 +53,32 @@ export function useIntegrity(opts: { enabled: boolean; requireFullscreen: boolea
   const devtoolsOpen = useRef(false);
   const once = useRef(new Set<string>());
   const baseline = useRef<number | null>(null);
+  const lastDpr = useRef(window.devicePixelRatio || 1);
   const streak = useRef(0);
 
   const emit = useCallback((s: Signal, d?: string) => cb.current(s, d), []);
+
+  useEffect(() => {
+    const sync = () => setFullscreen(!!document.fullscreenElement);
+    sync();
+    document.addEventListener('fullscreenchange', sync);
+    return () => document.removeEventListener('fullscreenchange', sync);
+  }, [enabled]);
+
+  // keep the device awake (a phone auto-locking would otherwise look like leaving the tab)
+  useEffect(() => {
+    if (!enabled) return;
+    let lock: { release: () => Promise<void> } | null = null;
+    const nav = navigator as Navigator & { wakeLock?: { request: (t: 'screen') => Promise<{ release: () => Promise<void> }> } };
+    const acquire = () => nav.wakeLock?.request('screen').then((l) => (lock = l)).catch(() => null);
+    acquire();
+    const onVis = () => document.visibilityState === 'visible' && acquire();
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      document.removeEventListener('visibilitychange', onVis);
+      lock?.release().catch(() => null);
+    };
+  }, [enabled]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -80,9 +103,11 @@ export function useIntegrity(opts: { enabled: boolean; requireFullscreen: boolea
     };
     const onFs = () => {
       const fs = !!document.fullscreenElement;
-      setFullscreen(fs);
       if (requireFullscreen) emit(fs ? 'FULLSCREEN_ENTER' : 'FULLSCREEN_EXIT');
+      if (fs) lockEscape();
     };
+    const lockEscape = () => (navigator as Navigator & { keyboard?: { lock?: (k: string[]) => Promise<void> } }).keyboard?.lock?.(['Escape']).catch(() => null);
+    if (document.fullscreenElement) lockEscape();
     const block = (type: Signal) => (e: ClipboardEvent) => {
       // rough-work notes in the scratchpad may use the clipboard; graded answers and questions may not
       const t = e.target as HTMLElement | null;
@@ -121,15 +146,18 @@ export function useIntegrity(opts: { enabled: boolean; requireFullscreen: boolea
       }
     };
     const onKeyUp = (e: KeyboardEvent) => {
-      if (e.key === 'PrintScreen') {
-        navigator.clipboard?.writeText('').catch(() => null);
-        emit('SCREENSHOT_KEY');
-      }
+      if (e.key === 'PrintScreen') navigator.clipboard?.writeText('').catch(() => null); // keydown already recorded it
     };
     const checkDevtools = () => {
       if (document.fullscreenElement) return;
       // docked devtools shrink the viewport; require the gap to *appear* after the exam started and persist for 2 checks
+      // browser zoom changes the gap too — re-baseline whenever the zoom level (devicePixelRatio) changes
       const gap = Math.max(window.outerWidth - window.innerWidth, window.outerHeight - window.innerHeight - 140);
+      if (window.devicePixelRatio !== lastDpr.current) {
+        lastDpr.current = window.devicePixelRatio;
+        baseline.current = null;
+        streak.current = 0;
+      }
       if (baseline.current === null) baseline.current = gap;
       const open = gap - baseline.current > 200;
       streak.current = open ? streak.current + 1 : 0;
@@ -143,9 +171,9 @@ export function useIntegrity(opts: { enabled: boolean; requireFullscreen: boolea
         once.current.add('multi');
         emit('MULTI_SCREEN');
       }
-      if (!document.fullscreenElement && window.innerWidth < screen.availWidth * 0.55 && !once.current.has('split')) {
+      if (!document.fullscreenElement && window.outerWidth < screen.availWidth * 0.55 && !once.current.has('split')) {
         once.current.add('split');
-        emit('SPLIT_SCREEN', `window ${window.innerWidth}px of ${screen.availWidth}px`);
+        emit('SPLIT_SCREEN', `window ${window.outerWidth}px of ${screen.availWidth}px`);
       }
     };
     const beforePrint = () => emit('BLOCKED_SHORTCUT', 'print');
@@ -201,6 +229,7 @@ export function useTypingMonitor(onSignal: (s: Signal, details?: string) => void
       const ne = e.nativeEvent as InputEvent;
       const len = e.currentTarget.value.length;
       const inserted = len - prevLength;
+      if (ne.inputType?.startsWith('history')) return; // undo/redo restores the candidate's own text
       if (inserted > 40 && ne.inputType !== 'insertText' && ne.inputType !== 'insertLineBreak') onSignal('PASTE_LIKE_INPUT', `${inserted} characters inserted at once (${ne.inputType || 'unknown'})`);
       else if (inserted > 60) onSignal('PASTE_LIKE_INPUT', `${inserted} characters in one input event`);
       if (ne.inputType === 'insertText') {

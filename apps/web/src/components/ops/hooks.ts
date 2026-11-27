@@ -46,6 +46,7 @@ export function useMonitorSocket(examId: string | undefined, onEvent: Handler) {
       s.off('connect', onConnect);
       s.off('disconnect', onDisconnect);
       listeners.forEach(([ev, fn]) => s.off(ev, fn));
+      s.emit('leave:exam', examId);
     };
   }, [examId]);
 
@@ -98,8 +99,9 @@ export function useHotkeys(map: Record<string, (e: KeyboardEvent) => void>, allo
 
 export function downloadCsv(filename: string, rows: (string | number | null | undefined)[][]) {
   const esc = (v: string | number | null | undefined) => {
-    const s = v == null ? '' : String(v);
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    let s = v == null ? '' : String(v);
+    if (/^[=+\-@\t]/.test(s) && typeof v === 'string') s = `'${s}`; // neutralise spreadsheet formulas
+    return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   const csv = rows.map((r) => r.map(esc).join(',')).join('\n');
   const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));

@@ -144,6 +144,7 @@ export function QuestionView({
               prevLen.current = e.currentTarget.value.length;
             }}
             onDrop={(e) => e.preventDefault()}
+            maxLength={20000}
             className="exam-text min-h-[260px] w-full resize-y rounded-xl border-2 border-line bg-surface p-4 outline-none transition focus:border-accent"
             placeholder="Start typing your answer…"
           />

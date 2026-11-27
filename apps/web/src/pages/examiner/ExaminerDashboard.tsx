@@ -28,7 +28,7 @@ export default function ExaminerDashboard() {
       live: by('ONGOING').sort((a, b) => +new Date(a.windowEnd) - +new Date(b.windowEnd)),
       upcoming: by('PUBLISHED').sort((a, b) => +new Date(a.windowStart) - +new Date(b.windowStart)),
       thisWeek: by('PUBLISHED').filter((e) => +new Date(e.windowStart) < week).length,
-      unpublished: by('COMPLETED').filter((e) => !e.resultsPublishedAt).sort((a, b) => +new Date(b.windowEnd) - +new Date(a.windowEnd)),
+      unpublished: by('COMPLETED').filter((e) => !e.resultsPublishedAt && e.stats.submitted > 0).sort((a, b) => +new Date(b.windowEnd) - +new Date(a.windowEnd)),
       drafts: by('DRAFT').sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt)),
       noCandidates: by('PUBLISHED').filter((e) => e.stats.enrolled === 0),
     };

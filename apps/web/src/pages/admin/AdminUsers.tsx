@@ -163,9 +163,11 @@ export default function AdminUsers() {
                           <IconBtn label={`Edit ${u.name}`} onClick={() => setEditing(u)}>
                             <Pencil className="size-4" />
                           </IconBtn>
-                          <IconBtn label={`Reset password for ${u.name}`} onClick={() => setResetting(u)}>
-                            <KeyRound className="size-4" />
-                          </IconBtn>
+                          {!self && (
+                            <IconBtn label={`Reset password for ${u.name}`} onClick={() => setResetting(u)}>
+                              <KeyRound className="size-4" />
+                            </IconBtn>
+                          )}
                           {!self && (
                             <IconBtn label={u.status === 'ACTIVE' ? `Disable ${u.name}` : `Enable ${u.name}`} onClick={() => setToggling(u)} danger={u.status === 'ACTIVE'}>
                               {u.status === 'ACTIVE' ? <Ban className="size-4" /> : <CheckCircle2 className="size-4" />}
