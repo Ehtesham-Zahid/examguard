@@ -52,6 +52,8 @@ export function useIntegrity(opts: { enabled: boolean; requireFullscreen: boolea
   const lastBlur = useRef(0);
   const devtoolsOpen = useRef(false);
   const once = useRef(new Set<string>());
+  const baseline = useRef<number | null>(null);
+  const streak = useRef(0);
 
   const emit = useCallback((s: Signal, d?: string) => cb.current(s, d), []);
 
@@ -126,9 +128,16 @@ export function useIntegrity(opts: { enabled: boolean; requireFullscreen: boolea
     };
     const checkDevtools = () => {
       if (document.fullscreenElement) return;
-      const open = window.outerWidth - window.innerWidth > 170 || window.outerHeight - window.innerHeight > 200;
-      if (open && !devtoolsOpen.current) emit('DEVTOOLS_OPEN');
-      devtoolsOpen.current = open;
+      // docked devtools shrink the viewport; require the gap to *appear* after the exam started and persist for 2 checks
+      const gap = Math.max(window.outerWidth - window.innerWidth, window.outerHeight - window.innerHeight - 140);
+      if (baseline.current === null) baseline.current = gap;
+      const open = gap - baseline.current > 200;
+      streak.current = open ? streak.current + 1 : 0;
+      if (streak.current === 2 && !devtoolsOpen.current) {
+        devtoolsOpen.current = true;
+        emit('DEVTOOLS_OPEN');
+      }
+      if (!open) devtoolsOpen.current = false;
       const s = window.screen as Screen & { isExtended?: boolean };
       if (s.isExtended && !once.current.has('multi')) {
         once.current.add('multi');
@@ -169,8 +178,8 @@ export function useIntegrity(opts: { enabled: boolean; requireFullscreen: boolea
 
   const enterFullscreen = useCallback(async () => {
     try {
-      await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
-      return true;
+      const r = await Promise.race([document.documentElement.requestFullscreen({ navigationUI: 'hide' }).then(() => true), new Promise<boolean>((res) => setTimeout(() => res(!!document.fullscreenElement), 1500))]);
+      return r || !!document.fullscreenElement;
     } catch {
       return false;
     }

@@ -64,7 +64,8 @@ export default function ExamLobby() {
     setBusy(true);
     try {
       const r = await api<{ attemptId: string }>(`/candidate/exams/${id}/start`, { method: 'POST', headers: sessionHeaders(), body: { accessCode: code.trim() || undefined } });
-      if (exam.rules.requireFullscreen) await document.documentElement.requestFullscreen?.().catch(() => null);
+      // try to enter full-screen while we still have the click gesture; never block navigation on it
+      if (exam.rules.requireFullscreen) await Promise.race([document.documentElement.requestFullscreen?.().catch(() => null), new Promise((r) => setTimeout(r, 600))]);
       nav(`/exam/${r.attemptId}`);
     } catch (e) {
       if (e instanceof ApiError && e.code === 'SESSION_LOCKED') {

@@ -122,7 +122,7 @@ export default function ExamWorkspace() {
       setFinish({ status: d.attempt.status, at: Date.now() });
       return setScreen('done');
     }
-    if (d.exam.settings.requireFullscreen && !document.fullscreenElement) setScreen('gate');
+    if (d.exam.settings.requireFullscreen && !document.fullscreenElement && document.fullscreenEnabled) setScreen('gate');
     else setScreen('exam');
     if (!fromSnapshot && local.length) scheduleFlush(50);
   };
@@ -378,6 +378,9 @@ export default function ExamWorkspace() {
 
   const { isFullscreen, enterFullscreen } = useIntegrity({ enabled: screen === 'exam', requireFullscreen: !!settings?.requireFullscreen, onSignal });
   const onTyping = useTypingMonitor(onSignal);
+  useEffect(() => {
+    if (screen === 'exam' && settings?.requireFullscreen && !document.fullscreenEnabled) eventQueue.current.push({ type: 'SPLIT_SCREEN', at: Date.now(), details: 'Device does not support full-screen mode' });
+  }, [screen, settings]);
 
   /* ------------------------------ navigation ------------------------------ */
   const commitTime = useCallback(() => {
@@ -677,7 +680,7 @@ export default function ExamWorkspace() {
       />
 
       {/* overlays */}
-      {(screen === 'gate' || (screen === 'exam' && settings?.requireFullscreen && !isFullscreen)) && (
+      {(screen === 'gate' || (screen === 'exam' && settings?.requireFullscreen && document.fullscreenEnabled && !isFullscreen)) && (
         <FullscreenGate
           first={screen === 'gate'}
           title={data?.exam.title ?? ''}
