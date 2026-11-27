@@ -3,6 +3,9 @@ import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
+import path from 'node:path';
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { config } from './core/config.js';
 import { errorHandler } from './core/errors.js';
 import { authRouter } from './modules/auth.routes.js';
@@ -35,5 +38,12 @@ export function createApp() {
   app.use('/api/verify', verifyRouter);
   app.use('/api', (_req, res) => res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Endpoint not found' } }));
   app.use(errorHandler);
+
+  // Production: serve the built SPA from the same origin (same-site cookies, no CORS, WebSockets on one host)
+  const webDist = process.env.WEB_DIST ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../web/dist');
+  if (fs.existsSync(webDist)) {
+    app.use(express.static(webDist, { index: false, maxAge: '1h' }));
+    app.get(/^(?!\/api|\/socket\.io).*/, (_req, res) => res.sendFile(path.join(webDist, 'index.html')));
+  }
   return app;
 }

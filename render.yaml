@@ -1,0 +1,22 @@
+# One-click Render Blueprint: free Postgres + one web service serving API, WebSockets and the React app
+databases:
+  - name: examguard-db
+    plan: free
+    databaseName: examguard
+services:
+  - type: web
+    name: examguard
+    runtime: node
+    plan: free
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter web build && pnpm --filter api build
+    startCommand: cd apps/api && npx prisma db push --skip-generate && (test "$SEED_ON_START" = "true" && npx tsx prisma/seed.ts || true) && node dist/server.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase: { name: examguard-db, property: connectionString }
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SEED_ON_START
+        value: "true"
