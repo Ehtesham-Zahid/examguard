@@ -9,7 +9,7 @@ services:
     runtime: node
     plan: free
     buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter web build && pnpm --filter api build
-    startCommand: cd apps/api && npx prisma db push --skip-generate && (test "$SEED_ON_START" = "true" && npx tsx prisma/seed.ts || true) && node dist/server.js
+    startCommand: cd apps/api && npx prisma db push --skip-generate && (test "$SEED_ON_START" = "true" && SEED_IF_EMPTY=true npx tsx prisma/seed.ts || true) && node dist/server.js
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV

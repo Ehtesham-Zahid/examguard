@@ -68,6 +68,10 @@ const SAMPLE_TEXT = [
 const COPIED = 'A stack is LIFO: the last element pushed is the first popped, like the undo history in an editor. A queue is FIFO: elements leave in the order they arrived, like a printer job queue at the office.';
 
 async function main() {
+  if (process.env.SEED_IF_EMPTY === 'true' && (await prisma.user.count()) > 0) {
+    console.log('Database already has data — skipping seed.');
+    return;
+  }
   console.log('Resetting data…');
   await prisma.$transaction([
     prisma.auditLog.deleteMany(), prisma.notification.deleteMany(), prisma.dispute.deleteMany(), prisma.certificate.deleteMany(),
