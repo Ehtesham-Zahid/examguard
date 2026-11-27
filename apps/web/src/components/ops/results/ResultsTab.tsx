@@ -6,7 +6,7 @@ import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, CheckCircle2, Download,
 import { api, ApiError, errMsg } from '@/lib/api';
 import { fmtDate, fmtDuration } from '@/lib/format';
 import { AttemptBadge } from '@/components/status';
-import { Badge, Button, Card, ConfirmDialog, cx, EmptyState, Field, Input, Modal, ProgressBar, Select, Stat, Table, Td, Textarea, Th } from '@/components/ui';
+import { Badge, Button, Card, ConfirmDialog, cx, EmptyState, Field, Input, Modal, ProgressBar, Select, Stat, Table, Td, Textarea, Th, buttonClass } from '@/components/ui';
 import type { ResultRow, ResultsData } from '../types';
 import { fmtScore, IntegrityPill } from '../bits';
 import { downloadCsv, useDownload } from '../hooks';
@@ -109,6 +109,7 @@ export function ResultsTab({ data }: { data: ResultsData }) {
 
   const published = !!exam.resultsPublishedAt;
   const needsGrading = grading.total - grading.graded;
+  const stillOpen = exam.status === 'PUBLISHED' && new Date(exam.windowEnd).getTime() > Date.now();
 
   return (
     <div className="flex flex-col gap-5">
@@ -129,6 +130,10 @@ export function ResultsTab({ data }: { data: ResultsData }) {
             <Button variant="outline" onClick={() => setUnpubOpen(true)}>
               Unpublish…
             </Button>
+          ) : stillOpen ? (
+            <Link to={`/examiner/exams/${exam.id}/monitor`} className={buttonClass('outline')} title="Results can be published once the exam window has closed">
+              <Lock className="size-4" aria-hidden /> Close the exam to publish
+            </Link>
           ) : (
             <Button onClick={() => setPublishOpen(true)} icon={<Globe className="size-4" />}>
               Publish results
@@ -143,6 +148,11 @@ export function ResultsTab({ data }: { data: ResultsData }) {
               {/manual grading/i.test(conflict) && (
                 <Link to={`/examiner/exams/${exam.id}/grading`} className="ml-2 font-semibold underline">
                   Open grading →
+                </Link>
+              )}
+              {/close the exam|still writing/i.test(conflict) && (
+                <Link to={`/examiner/exams/${exam.id}/monitor`} className="ml-2 font-semibold underline">
+                  Open live monitor →
                 </Link>
               )}
             </div>

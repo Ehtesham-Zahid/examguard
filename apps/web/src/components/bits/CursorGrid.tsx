@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
+import { prefersReducedMotion } from '@/lib/motion';
 
 export type CursorGridFalloff = 'linear' | 'smooth' | 'sharp';
 export type CursorGridHighlight = 'area' | 'cell';
@@ -347,7 +348,7 @@ const CursorGrid = ({
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
 
-    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    const reduce = prefersReducedMotion();
     const view = { width: 1, height: 1, ratio: 1, cellSize: 0 };
     const grid = { cols: 0, rows: 0, offX: 0, offY: 0 };
     const pointer = { x: 0, y: 0, inside: false };

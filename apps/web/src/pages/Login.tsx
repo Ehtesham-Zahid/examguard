@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/auth';
 import { errMsg } from '@/lib/api';
 import { Button, Field, Input } from '@/components/ui';
 import { Logo } from '@/layouts/AppShell';
+import { useThemeMode } from '@/lib/theme';
 import CursorGrid from '@/components/bits/CursorGrid';
 import RotatingText from '@/components/bits/RotatingText';
 
@@ -25,7 +26,8 @@ export default function Login() {
   const [error, setError] = useState('');
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [busy, setBusy] = useState(false);
-  const dark = document.documentElement.dataset.theme === 'dark';
+  const mode = useThemeMode();
+  const dark = mode !== 'light';
   const home = (u: { role: string }) => ({ ADMIN: '/admin', EXAMINER: '/examiner', CANDIDATE: '/candidate' })[u.role] ?? '/';
   if (user) return <Navigate to={loc.state?.from ?? home(user)} replace />;
 
@@ -52,7 +54,7 @@ export default function Login() {
     <div className="grid min-h-full lg:grid-cols-[1.05fr_1fr]">
       <section className="relative hidden overflow-hidden border-r border-line bg-surface lg:flex lg:flex-col lg:justify-between">
         {/* React Bits CursorGrid: the graph paper lights up in highlighter yellow under the cursor */}
-        <CursorGrid className="!absolute inset-0" cellSize={28} color="#F7E64A" gridColor={dark ? '#25395A' : '#D6E8F5'} gridOpacity={1} radius={85} maxOpacity={0.8} fillOpacity={0.5} falloff="smooth" holdTime={250} fadeDuration={700} clickPulse lightMode={!dark} />
+        <CursorGrid className="!absolute inset-0" cellSize={28} color="#F7E64A" gridColor={mode === 'contrast' ? '#333333' : dark ? '#25395A' : '#D6E8F5'} gridOpacity={1} radius={85} maxOpacity={0.8} fillOpacity={0.5} falloff="smooth" holdTime={250} fadeDuration={700} clickPulse lightMode={!dark} />
         <div aria-hidden className="pointer-events-none absolute inset-y-0 left-16 w-[1.5px] bg-margin/60" />
         <div className="pointer-events-none relative flex flex-1 flex-col justify-between py-12 pl-24 pr-12">
           <Logo />

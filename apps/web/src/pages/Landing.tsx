@@ -35,6 +35,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/lib/auth';
 import { cx } from '@/components/ui';
 import { Logo } from '@/layouts/AppShell';
+import { useThemeMode } from '@/lib/theme';
 import CursorGrid from '@/components/bits/CursorGrid';
 import RotatingText from '@/components/bits/RotatingText';
 import CountUp from '@/components/bits/CountUp';
@@ -110,7 +111,7 @@ function Nav() {
             </li>
           ))}
         </ul>
-        <div className="ml-auto hidden items-center gap-2 sm:flex">
+        <div className="ml-auto hidden items-center gap-2 md:flex">
           <Link to="/verify" className="rounded-lg px-3 py-2 text-sm font-semibold text-ink-2 hover:bg-surface-2 hover:text-ink">
             Verify a result
           </Link>
@@ -124,12 +125,12 @@ function Nav() {
             </Link>
           )}
         </div>
-        <button className="ml-auto rounded-lg p-2 hover:bg-surface-2 sm:hidden" onClick={() => setOpen((o) => !o)} aria-label={open ? 'Close menu' : 'Open menu'} aria-expanded={open}>
+        <button className="ml-auto rounded-lg p-2 hover:bg-surface-2 md:hidden" onClick={() => setOpen((o) => !o)} aria-label={open ? 'Close menu' : 'Open menu'} aria-expanded={open}>
           {open ? <X className="size-5" /> : <Menu className="size-5" />}
         </button>
       </nav>
       {open && (
-        <div className="pop-in border-t border-line bg-surface px-4 py-3 sm:hidden">
+        <div className="pop-in border-t border-line bg-surface px-4 py-3 md:hidden">
           {links.map(([href, label]) => (
             <a key={href} href={href} onClick={() => setOpen(false)} className="block rounded-lg px-3 py-2.5 font-semibold text-ink-2 hover:bg-surface-2">
               {label}
@@ -149,10 +150,11 @@ function Nav() {
 
 function Hero() {
   const { user } = useAuth();
-  const dark = document.documentElement.dataset.theme === 'dark';
+  const mode = useThemeMode();
+  const dark = mode !== 'light';
   return (
     <section className="relative overflow-hidden pb-20 pt-28 sm:pt-32">
-      <CursorGrid className="!absolute inset-0" cellSize={28} color="#F7E64A" gridColor={dark ? '#1C3050' : '#E3EFF9'} gridOpacity={1} radius={90} maxOpacity={0.75} fillOpacity={0.45} falloff="smooth" holdTime={250} fadeDuration={800} lightMode={!dark} edgeFade={0.15} />
+      <CursorGrid className="!absolute inset-0" cellSize={28} color="#F7E64A" gridColor={mode === 'contrast' ? '#333333' : dark ? '#1C3050' : '#E3EFF9'} gridOpacity={1} radius={90} maxOpacity={0.75} fillOpacity={0.45} falloff="smooth" holdTime={250} fadeDuration={800} lightMode={!dark} edgeFade={0.15} />
       <div aria-hidden className="pointer-events-none absolute inset-y-0 left-3 w-[1.5px] bg-margin/50 sm:left-6" />
       <div className="pointer-events-none relative mx-auto grid max-w-[1440px] items-center gap-14 pl-8 pr-5 sm:pl-12 sm:pr-8 lg:pr-10 lg:grid-cols-[1.05fr_1fr]">
         <div className="pointer-events-auto">
@@ -217,7 +219,7 @@ function Marquee() {
 
 function Stats() {
   const items: [number, string, string][] = [
-    [128, '', 'automated checks pass on every change'],
+    [135, '', 'automated checks in the test suites'],
     [8, '/8', 'secondary features, all working'],
     [4, '', 'innovation challenges tackled'],
     [0, '', 'webcams, microphones or screen recordings'],
@@ -266,7 +268,7 @@ const FEATURE_GROUPS: { title: string; tag: string; icon: typeof FileQuestion; i
     icon: Monitor,
     items: [
       [Activity, 'Live dashboard', "See who's writing, offline or stuck, with time left and progress."],
-      [ShieldCheck, 'Integrity signals', 'Tab switches, pastes, second screens. Evidence for review, never a verdict.'],
+      [ShieldCheck, 'Integrity signals', 'Tab switches, pastes, second screens: recorded for review, with clear warnings to the candidate.'],
       [ClipboardList, 'Pause, extend, announce', 'Pause everyone, extend one candidate, broadcast a correction.'],
     ],
   },
@@ -376,7 +378,7 @@ function Integrity() {
     [Video, 'No webcam'],
     [Mic, 'No microphone'],
     [EyeOff, 'No screen recording'],
-    [Gavel, 'No automatic accusations'],
+    [Gavel, 'No hidden penalties'],
   ];
   return (
     <section id="integrity" className="scroll-mt-20 relative overflow-hidden border-y-2 border-ink bg-accent text-accent-ink">
@@ -388,14 +390,17 @@ function Integrity() {
               <span className="h-[2px] w-6 rounded bg-margin" aria-hidden /> Integrity in the AI era
             </div>
             <h2 className="display text-[38px] font-bold leading-[1.08] sm:text-[48px]">Catches cheating, not students.</h2>
-            <p className="mt-4 max-w-lg text-[19px] leading-relaxed opacity-85">Privacy-first signals that an examiner reviews. Candidates see the rules up front and get a clear warning every time. Nothing is decided by a camera or an algorithm.</p>
+            <p className="mt-4 max-w-lg text-[19px] leading-relaxed opacity-85">Privacy-first signals that an examiner reviews. Candidates see the rules up front and get a clear warning every time. The only automatic step is the warning limit the examiner sets, and the candidate is told about it before starting.</p>
           </Reveal>
           <div ref={setRef} className="mt-8 grid gap-2 rounded-2xl bg-surface p-5 text-ink shadow-[6px_6px_0_var(--hl)] sm:grid-cols-2">
             <div className="col-span-full mb-1 flex items-center gap-2 font-mono text-[12px] font-bold uppercase tracking-[0.14em] text-muted">
               <Eye className="size-4" /> What we watch for
             </div>
+            <ul className="sr-only">
+              {watch.map((w) => <li key={w}>{w}</li>)}
+            </ul>
             {watch.map((w, i) => (
-              <SpringCheck key={w} checked={checked[i]} onChange={(v) => setChecked((c) => c.map((x, j) => (j === i ? v : x)))} label={w} color="var(--ink)" fillColor="var(--ink)" checkColor="var(--hl)" boxSize={18} boxRadius={5} fontSize={14} strike="none" doneOpacity={1} />
+              <div key={w} aria-hidden inert className="pointer-events-none"><SpringCheck checked={checked[i]} onChange={(v) => setChecked((c) => c.map((x, j) => (j === i ? v : x)))} label={w} color="var(--ink)" fillColor="var(--ink)" checkColor="var(--hl)" boxSize={18} boxRadius={5} fontSize={14} strike="none" doneOpacity={1} /></div>
             ))}
           </div>
         </div>

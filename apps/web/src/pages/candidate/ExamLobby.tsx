@@ -7,7 +7,7 @@ import { api, ApiError, errMsg } from '@/lib/api';
 import { fmtDate, fmtDuration } from '@/lib/format';
 import { sessionHeaders } from '@/lib/session';
 import type { Phase } from '@/lib/types';
-import { Badge, Button, Card, CardHeader, cx, ErrorBox, Field, Input, Spinner } from '@/components/ui';
+import { Badge, Button, ButtonLink, Card, CardHeader, cx, ErrorBox, Field, Input, Spinner } from '@/components/ui';
 import { PhaseBadge } from '@/components/status';
 import { RichText } from '@/components/RichText';
 import SpringCheck from '@/components/bits/SpringCheck';
@@ -131,7 +131,7 @@ export default function ExamLobby() {
                 <h2 className="mt-2 font-semibold">You've submitted this exam</h2>
                 <p className="mt-1 text-sm text-muted">Submitted {fmtDate(attempt!.submittedAt)}</p>
                 {attempt!.compensation?.status === 'PENDING' && <p className="mt-3 rounded-lg bg-info-soft p-3 text-left text-sm text-info">A time-compensation request is under review: {attempt!.compensation.reason}. If approved, your exam will reopen with the time you lost.</p>}
-                {exam.resultsPublished && <Link to={`/candidate/results/${attempt!.id}`}><Button className="mt-4 w-full">View result</Button></Link>}
+                {exam.resultsPublished && <ButtonLink to={`/candidate/results/${attempt!.id}`} className="mt-4 w-full">View result</ButtonLink>}
               </div>
             ) : exam.phase === 'PUBLISHED' ? (
               <div className="text-center">
@@ -177,6 +177,7 @@ export default function ExamLobby() {
                       boxRadius={5}
                       fontSize={14}
                       strike="none"
+                      doneOpacity={1}
                       ariaLabel="I've read the instructions and will complete this exam on my own"
                       label="I've read the instructions and will complete this exam on my own, without outside help or AI tools."
                     />

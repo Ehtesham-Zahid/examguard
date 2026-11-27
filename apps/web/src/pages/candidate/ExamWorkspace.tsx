@@ -10,7 +10,7 @@ import { acknowledge, clearAttempt, db, dropRejected, loadSnapshot, markPendingO
 import { getSessionId, sessionHeaders } from '@/lib/session';
 import { getSocket } from '@/lib/socket';
 import { localPrefs } from '@/lib/theme';
-import { Badge, Button, cx, Kbd, Modal } from '@/components/ui';
+import { Badge, Button, ButtonLink, cx, Kbd, Modal } from '@/components/ui';
 import { Logo } from '@/layouts/AppShell';
 import { PreferenceControls } from '@/pages/Settings';
 import { isAnswered, QuestionView, type WAnswer, type WQuestion } from './workspace/QuestionView';
@@ -74,6 +74,8 @@ export default function ExamWorkspace() {
   answersRef.current = answers;
   const lastSeqFloor = useRef(0);
   const autoSubmitted = useRef(false);
+  const [confirmSubmit, setConfirmSubmit] = useState(false);
+  const timeUpRef = useRef<() => void>(() => undefined);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const currentRef = useRef(current);
   currentRef.current = current;
@@ -262,7 +264,7 @@ export default function ExamWorkspace() {
         const r = await api<{ serverNow: number; status: string; deadline: string; paused: boolean }>(`/candidate/attempts/${attemptId}/heartbeat`, {
           method: 'POST',
           headers: sessionHeaders(),
-          body: { currentQuestion: currentRef.current + 1, answered: Object.values(answersRef.current).filter(isAnswered).length, online: true },
+          body: { currentQuestion: currentRef.current + 1, answered: Object.values(answersRef.current).filter(isAnswered).length, online: true, pending: (await pendingFor(attemptId)).length },
           timeoutMs: 8000,
         });
         syncClock(r.serverNow, performance.now() - t0);
@@ -299,7 +301,7 @@ export default function ExamWorkspace() {
           toast.warning(`${m} minute${m > 1 ? 's' : ''} remaining`);
           setLiveMsg(`${m} minute${m > 1 ? 's' : ''} remaining`);
         }
-      if (r <= 0 && screenRef.current === 'exam') timeUp();
+      if (r <= 0 && screenRef.current === 'exam') timeUpRef.current();
     }, 250);
     return () => clearInterval(iv);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -446,6 +448,7 @@ export default function ExamWorkspace() {
       const t = e.target as HTMLElement;
       if (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT' || e.metaKey || e.ctrlKey || e.altKey) return;
       if (reviewOpen || prefsOpen || helpOpen || scratchOpen || warning || paletteOpen) return;
+      if (pausedRef.current || (settings?.requireFullscreen && document.fullscreenEnabled && !document.fullscreenElement)) return;
       if ((e.key === 'ArrowRight' || e.key === 'ArrowLeft') && t.closest('[role="radio"],[role="checkbox"],button')) return;
       const q = questions[current];
       if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'n') go(current + 1);
@@ -542,6 +545,7 @@ export default function ExamWorkspace() {
     toast.info("Time's up — submitting your answers.");
     submit(true);
   }, [submit]);
+  timeUpRef.current = timeUp;
 
   // retry pending sync after an offline expiry
   useEffect(() => {
@@ -577,7 +581,7 @@ export default function ExamWorkspace() {
         <p className="mt-1 max-w-md text-sm text-muted">{loadError}</p>
         <div className="mt-5 flex gap-2">
           <Button onClick={load}>Try again</Button>
-          <Link to="/app"><Button variant="outline">Back to dashboard</Button></Link>
+          <ButtonLink to="/app" variant="outline">Back to dashboard</ButtonLink>
         </div>
       </FullCenter>
     );
@@ -773,15 +777,24 @@ export default function ExamWorkspace() {
       </Modal>
       <Modal
         open={reviewOpen}
-        onClose={() => setReviewOpen(false)}
+        onClose={() => { setReviewOpen(false); setConfirmSubmit(false); }}
         title="Review before submitting"
         description="Once submitted, you can't change your answers."
         footer={
           <>
             <Button variant="ghost" onClick={() => setReviewOpen(false)} data-autofocus>Keep working</Button>
-            <HoldButton holdTime={1200} backgroundColor="var(--accent)" fillColor="var(--hl)" textColor="var(--accent-ink)" fillTextColor="var(--hl-ink)" radius={10} size="md" doneLabel="Submitting…" onHold={() => submit(false)}>
-              Hold to submit
-            </HoldButton>
+            {confirmSubmit ? (
+              <Button onClick={() => submit(false)} data-autofocus>
+                Yes, submit now
+              </Button>
+            ) : (
+              // a quick tap, or a screen reader's synthetic click (detail 0), asks for a plain confirmation instead
+              <span onClickCapture={(e) => e.detail === 0 && setConfirmSubmit(true)}>
+                <HoldButton holdTime={1200} backgroundColor="var(--accent)" fillColor="var(--hl)" textColor="var(--accent-ink)" fillTextColor="var(--hl-ink)" radius={10} size="md" doneLabel="Submitting…" onHold={() => submit(false)} onTap={() => setConfirmSubmit(true)}>
+                  Hold to submit
+                </HoldButton>
+              </span>
+            )}
           </>
         }
       >
@@ -965,7 +978,7 @@ function DoneScreen({ finish, sandbox, examId, answered, total, pending }: { fin
         )}
         {!sandbox && !pendingSync && <p className="mt-4 text-sm text-muted">Results will appear on your dashboard once your examiner publishes them.</p>}
         <div className="mt-6 flex justify-center gap-2">
-          {sandbox && examId ? <Link to={`/examiner/exams/${examId}`}><Button>Back to exam editor</Button></Link> : <Link to="/candidate"><Button>Back to my exams</Button></Link>}
+          {sandbox && examId ? <Link to={`/examiner/exams/${examId}`}><Button>Back to exam editor</Button></Link> : <ButtonLink to="/candidate">Back to my exams</ButtonLink>}
         </div>
       </div>
     </div>

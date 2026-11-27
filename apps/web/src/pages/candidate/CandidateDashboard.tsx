@@ -1,12 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { ArrowRight, CalendarClock, CheckCircle2, Clock, KeyRound, PlayCircle, Timer } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { fmtDate, fmtDay, fmtDuration, fmtTime } from '@/lib/format';
 import type { Phase } from '@/lib/types';
-import { Badge, Button, Card, cx, EmptyState, ErrorBox, PageHeader, Spinner, Tabs } from '@/components/ui';
+import { Badge, Button, ButtonLink, Card, cx, EmptyState, ErrorBox, PageHeader, Spinner, Tabs } from '@/components/ui';
 import { AttemptBadge, PhaseBadge } from '@/components/status';
 
 export interface CandidateExam {
@@ -45,8 +45,12 @@ export default function CandidateDashboard() {
   const offset = data ? new Date(data.serverNow).getTime() - dataUpdatedAt : 0;
   const items = data?.items ?? [];
   const by = (c: string) => items.filter((i) => i.category === c);
+  // pick a sensible starting tab once; later refetches must not override the user's choice
+  const autoTabbed = useRef(false);
   useEffect(() => {
-    if (data && !by('available').length && by('upcoming').length) setTab('upcoming');
+    if (!data || autoTabbed.current) return;
+    autoTabbed.current = true;
+    if (!by('available').length && by('upcoming').length) setTab('upcoming');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
   const list = by(tab);
@@ -63,7 +67,7 @@ export default function CandidateDashboard() {
             <div className="font-semibold text-info">You have an exam in progress</div>
             <div className="text-sm text-ink-2">{inProgress.title} — time remaining {fmtDuration(new Date(inProgress.attempt!.deadline).getTime() - (now + offset))}. Your answers are saved.</div>
           </div>
-          <Link to={`/candidate/exams/${inProgress.id}`}><Button icon={<ArrowRight className="size-4" />} className="flex-row-reverse">Resume</Button></Link>
+          <ButtonLink to={`/candidate/exams/${inProgress.id}`} icon={<ArrowRight className="size-4" />} className="flex-row-reverse">Resume</ButtonLink>
         </Card>
       )}
       <Tabs
@@ -132,9 +136,7 @@ function ExamCard({ e, now }: { e: CandidateExam; now: number }) {
         {e.category === 'available' && (
           <div className="space-y-2">
             <div className={cx('text-xs', closesIn < 3600000 ? 'text-danger' : 'text-muted')}>Window closes in {closesIn > 86400000 ? `${Math.floor(closesIn / 86400000)} days` : fmtDuration(closesIn)}</div>
-            <Link to={`/candidate/exams/${e.id}`} className="block">
-              <Button className="w-full" icon={e.requiresAccessCode ? <KeyRound className="size-4" /> : <PlayCircle className="size-4" />}>{e.attempt ? 'Resume exam' : 'View instructions & start'}</Button>
-            </Link>
+            <ButtonLink to={`/candidate/exams/${e.id}`} className="w-full" icon={e.requiresAccessCode ? <KeyRound className="size-4" /> : <PlayCircle className="size-4" />}>{e.attempt ? 'Resume exam' : 'View instructions & start'}</ButtonLink>
           </div>
         )}
         {e.category === 'completed' &&

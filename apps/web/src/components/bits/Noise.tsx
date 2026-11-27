@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
+import { prefersReducedMotion } from '@/lib/motion';
 
 export type NoiseBlendMode = 'normal' | 'overlay' | 'soft-light' | 'multiply' | 'screen' | 'difference';
 
@@ -166,7 +167,7 @@ const Noise = ({
     const canvas = dustRef.current;
     const ctx = canvas?.getContext('2d');
     if (!root || !grain || !canvas || !ctx) return undefined;
-    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    const reduce = prefersReducedMotion();
     const scratchList: { x: number; age: number; life: number; weight: number; light: boolean; phase: number }[] = [];
     let raf = 0;
     let last = 0;

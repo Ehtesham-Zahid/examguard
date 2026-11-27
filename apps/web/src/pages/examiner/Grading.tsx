@@ -57,6 +57,7 @@ export default function Grading() {
     const s = currentScore(item);
     setScore(s == null ? '' : String(s));
     setFeedback(item.feedback ?? '');
+    setReason('');
     setTouched(false);
     // focus the score box for fast keyboard grading
     setTimeout(() => scoreRef.current?.focus({ preventScroll: true }), 0);

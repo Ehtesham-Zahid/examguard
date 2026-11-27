@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { api, refreshAccessToken, setAccessToken, setLogoutHandler } from './api';
 import { disconnectSocket } from './socket';
 import type { Prefs, User } from './types';
-import { applyPrefs, localPrefs, saveLocalPrefs } from './theme';
+import { applyPrefs, localPrefs, saveLocalPrefs, watchSystemTheme } from './theme';
 
 interface AuthCtx {
   user: User | null;
@@ -27,6 +27,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     saveLocalPrefs(merged);
   }, []);
 
+  useEffect(() => watchSystemTheme(), []);
   useEffect(() => {
     applyPrefs(localPrefs());
     setLogoutHandler(() => {

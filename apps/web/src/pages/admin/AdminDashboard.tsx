@@ -96,7 +96,7 @@ function ChainBanner({ chain }: { chain: Overview['auditChain'] }) {
         chain.valid ? 'border-transparent bg-ok-soft hover:brightness-[0.98]' : 'border-danger/40 bg-danger-soft',
       )}
     >
-      <span className={cx('grid size-10 place-items-center rounded-full', chain.valid ? 'bg-ok text-surface' : 'bg-danger text-white')} aria-hidden>
+      <span className={cx('grid size-10 place-items-center rounded-full', chain.valid ? 'bg-ok text-surface' : 'bg-danger text-danger-ink')} aria-hidden>
         {chain.valid ? <ShieldCheck className="size-5" /> : <AlertTriangle className="size-5" />}
       </span>
       <div className="min-w-0 flex-1">

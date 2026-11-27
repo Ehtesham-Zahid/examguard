@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, type CSSProperties, type HTMLAttributes } from 'react';
+import { prefersReducedMotion } from '@/lib/motion';
 
 export type StickerFinish = 'gloss' | 'matte' | 'holo';
 
@@ -517,7 +518,7 @@ const StickerPeel = ({
       return rgb;
     };
 
-    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    const reduce = prefersReducedMotion();
     const sticker: {
       ready: boolean;
       aspect: number;

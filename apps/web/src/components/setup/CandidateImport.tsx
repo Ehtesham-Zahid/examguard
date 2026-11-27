@@ -53,7 +53,11 @@ export function CandidateImport({ open, onClose, enrollExamId }: { open: boolean
       onCommitted={() => {
         qc.invalidateQueries({ queryKey: ['users'] });
         qc.invalidateQueries({ queryKey: ['groups'] });
-        if (enrollExamId) qc.invalidateQueries({ queryKey: ['enrollments', enrollExamId] });
+        qc.invalidateQueries({ queryKey: ['admin-overview'] });
+        if (enrollExamId) {
+          qc.invalidateQueries({ queryKey: ['enrollments', enrollExamId] });
+          qc.invalidateQueries({ queryKey: ['exam', enrollExamId] });
+        }
       }}
       renderDone={(r) =>
         r.credentials?.length ? (

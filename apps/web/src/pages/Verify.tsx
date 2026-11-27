@@ -22,12 +22,17 @@ export default function Verify() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   useEffect(() => {
+    setInput(code ?? '');
+    setRes(null); // never show a previous lookup's result next to a new one
     if (!code) return;
     setLoading(true);
     setError('');
     api<Result>(`/verify/${encodeURIComponent(code)}`)
       .then(setRes)
-      .catch((e) => setError(errMsg(e)))
+      .catch((e) => {
+        setRes(null);
+        setError(errMsg(e));
+      })
       .finally(() => setLoading(false));
   }, [code]);
   const submit = (e: FormEvent) => {

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { prefersReducedMotion } from '@/lib/motion';
 
 export type LogoItem =
   | {
@@ -297,7 +298,7 @@ const createEngine = (
     active: null,
     raf: 0,
     last: 0,
-    reduced: !!query?.matches,
+    reduced: prefersReducedMotion(),
     destroyed: false
   };
 
@@ -976,7 +977,7 @@ const createEngine = (
   };
 
   const onMotion = () => {
-    st.reduced = !!query?.matches;
+    st.reduced = prefersReducedMotion();
     wake();
   };
 

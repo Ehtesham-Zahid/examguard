@@ -1,8 +1,9 @@
 import { clsx } from 'clsx';
 import { Loader2, X } from 'lucide-react';
 import CountUp from '@/components/bits/CountUp';
-import { forwardRef, useEffect, useId, useRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
+import { forwardRef, useEffect, useId, useRef, type AnchorHTMLAttributes, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
 import { createPortal } from 'react-dom';
+import { Link } from 'react-router-dom';
 
 export const cx = clsx;
 
@@ -16,19 +17,21 @@ const variants: Record<Variant, string> = {
   ghost: 'text-ink-2 hover:bg-surface-2 hover:text-ink',
   danger: 'bg-danger text-danger-ink hover:brightness-110',
 };
+export const buttonClass = (variant: Variant = 'primary', size: 'sm' | 'md' | 'lg' = 'md', className?: string) =>
+  cx(
+    'inline-flex select-none items-center justify-center gap-2 rounded-lg font-semibold transition-all duration-150 active:translate-y-0 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50',
+    size === 'sm' && 'h-8 px-3 text-[13px]',
+    size === 'md' && 'h-10 px-4 text-sm',
+    size === 'lg' && 'h-12 px-6 text-[15px]',
+    variants[variant],
+    className,
+  );
 export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; size?: 'sm' | 'md' | 'lg'; loading?: boolean; icon?: ReactNode }>(
   ({ variant = 'primary', size = 'md', loading, icon, className, children, disabled, ...rest }, ref) => (
     <button
       ref={ref}
       disabled={disabled || loading}
-      className={cx(
-        'inline-flex select-none items-center justify-center gap-2 rounded-lg font-semibold transition-all duration-150 active:translate-y-0 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50',
-        size === 'sm' && 'h-8 px-3 text-[13px]',
-        size === 'md' && 'h-10 px-4 text-sm',
-        size === 'lg' && 'h-12 px-6 text-[15px]',
-        variants[variant],
-        className,
-      )}
+      className={buttonClass(variant, size, className)}
       {...rest}
     >
       {loading ? <Loader2 className="size-4 animate-spin" aria-hidden /> : icon}
@@ -37,6 +40,16 @@ export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLBut
   ),
 );
 Button.displayName = 'Button';
+
+/** A router link that looks like a Button (avoids invalid <a><button> nesting). */
+export function ButtonLink({ to, variant, size, icon, className, children, ...rest }: { to: string; variant?: Variant; size?: 'sm' | 'md' | 'lg'; icon?: ReactNode; className?: string; children: ReactNode } & Omit<AnchorHTMLAttributes<HTMLAnchorElement>, 'href'>) {
+  return (
+    <Link to={to} className={buttonClass(variant, size, className)} {...rest}>
+      {icon}
+      {children}
+    </Link>
+  );
+}
 
 /* ------------------------------- Fields ------------------------------- */
 export function Field({ label, hint, error, children, required, className }: { label: string; hint?: ReactNode; error?: string; children: (id: string) => ReactNode; required?: boolean; className?: string }) {
@@ -220,7 +233,7 @@ export function Modal({ open, onClose, title, description, children, footer, siz
   useEffect(() => {
     if (!open) return;
     const prev = document.activeElement as HTMLElement | null;
-    const t = setTimeout(() => (ref.current?.querySelector<HTMLElement>('[data-autofocus]') ?? ref.current?.querySelector<HTMLElement>('input,textarea,select,button'))?.focus(), 20);
+    const t = setTimeout(() => (ref.current?.querySelector<HTMLElement>('[data-autofocus]') ?? ref.current?.querySelector<HTMLElement>('input:not([type=hidden]),textarea,select') ?? ref.current?.querySelector<HTMLElement>('button'))?.focus(), 20);
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && dismissRef.current) onCloseRef.current();
       if (e.key === 'Tab' && ref.current) {
@@ -288,10 +301,11 @@ export function ConfirmDialog({ open, onClose, onConfirm, title, body, confirmLa
       size="sm"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
+          {/* destructive actions focus Cancel first so a stray Enter can't confirm them */}
+          <Button variant="ghost" onClick={onClose} data-autofocus={tone === 'danger' && !children ? true : undefined}>
             Cancel
           </Button>
-          <Button variant={tone} onClick={onConfirm} loading={loading} data-autofocus>
+          <Button variant={tone} onClick={onConfirm} loading={loading} data-autofocus={tone === 'danger' ? undefined : true}>
             {confirmLabel}
           </Button>
         </>
@@ -317,7 +331,7 @@ export function Tabs<T extends string>({ tabs, value, onChange, className }: { t
         >
           {t.label}
           {t.count !== undefined && <span className="tabular rounded-full bg-surface-2 px-1.5 text-[11px] text-ink-2">{t.count}</span>}
-          <span aria-hidden className={cx('absolute inset-x-2 bottom-0 h-[3px] origin-left rounded-full bg-hl transition-transform duration-300', value === t.id ? 'scale-x-100' : 'scale-x-0')} />
+          <span aria-hidden className={cx('absolute inset-x-2 bottom-0 h-[3px] origin-left rounded-full bg-ink transition-transform duration-300', value === t.id ? 'scale-x-100' : 'scale-x-0')} />
         </button>
       ))}
     </div>

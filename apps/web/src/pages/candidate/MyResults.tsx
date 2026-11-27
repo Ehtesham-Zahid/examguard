@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { Award, ChevronRight, Download, GraduationCap } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { api, downloadFile } from '@/lib/api';
+import { api } from '@/lib/api';
+import { useDownload } from '@/components/ops/hooks';
 import { fmtDate, pct } from '@/lib/format';
-import { Badge, Button, Card, EmptyState, ErrorBox, PageHeader, ProgressBar, Spinner } from '@/components/ui';
+import { Badge, Button, ButtonLink, Card, EmptyState, ErrorBox, PageHeader, ProgressBar, Spinner } from '@/components/ui';
 
 interface R {
   attemptId: string;
@@ -16,6 +17,7 @@ interface R {
 }
 
 export default function MyResults() {
+  const dl = useDownload();
   const { data, isLoading, error, refetch } = useQuery({ queryKey: ['my-results'], queryFn: () => api<R[]>('/candidate/results') });
   const avg = data?.length ? Math.round(data.reduce((s, r) => s + pct(r.score, r.maxScore), 0) / data.length) : 0;
   return (
@@ -49,8 +51,8 @@ export default function MyResults() {
                   <Badge tone={r.passed ? 'ok' : 'danger'}>{r.passed ? 'Pass' : 'Fail'} · {pct(r.score, r.maxScore)}%</Badge>
                 </div>
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm" icon={<Download className="size-4" />} onClick={() => downloadFile(`/reports/attempts/${r.attemptId}/pdf`, 'result.pdf')}>PDF</Button>
-                  <Link to={`/candidate/results/${r.attemptId}`}><Button size="sm" variant="secondary" icon={<ChevronRight className="size-4" />} className="flex-row-reverse">Details</Button></Link>
+                  <Button variant="outline" size="sm" icon={<Download className="size-4" />} loading={dl.busy === `/reports/attempts/${r.attemptId}/pdf`} onClick={() => dl.run(`/reports/attempts/${r.attemptId}/pdf`, 'result.pdf')}>PDF</Button>
+                  <ButtonLink to={`/candidate/results/${r.attemptId}`} size="sm" variant="secondary" icon={<ChevronRight className="size-4" />} className="flex-row-reverse">Details</ButtonLink>
                 </div>
               </Card>
             ))}

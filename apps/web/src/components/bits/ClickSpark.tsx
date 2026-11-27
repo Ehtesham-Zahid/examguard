@@ -1,6 +1,7 @@
 'use client';
 
 import { forwardRef, useEffect, useImperativeHandle, useRef, type CSSProperties, type ReactNode } from 'react';
+import { prefersReducedMotion } from '@/lib/motion';
 
 export type ClickSparkShape = 'line' | 'streak' | 'dot' | 'star';
 
@@ -187,7 +188,7 @@ const ClickSpark = forwardRef<ClickSparkHandle, ClickSparkProps>(
       const layer = layerRef.current;
       if (!root || !layer) return;
 
-      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const reduced = prefersReducedMotion();
       const bursts: Burst[] = [];
       let raf = 0;
       let lastPress = { time: -1e9, x: 0, y: 0 };

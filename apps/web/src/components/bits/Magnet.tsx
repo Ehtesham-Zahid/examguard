@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, type HTMLAttributes, type ReactNode } from 'react';
+import { prefersReducedMotion } from '@/lib/motion';
 
 export type MagnetAxis = 'both' | 'x' | 'y';
 
@@ -164,7 +165,7 @@ const Magnet = ({
     const inner = innerRef.current;
     if (!wrapper || !inner) return undefined;
 
-    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    const reduce = prefersReducedMotion();
     const current: Motion = { x: 0, y: 0, tiltX: 0, tiltY: 0, scale: 1 };
     const velocity: Motion = { x: 0, y: 0, tiltX: 0, tiltY: 0, scale: 0 };
     let active = false;

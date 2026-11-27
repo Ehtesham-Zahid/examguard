@@ -14,6 +14,8 @@ export function invalidateExam(qc: QueryClient, id: string) {
   qc.invalidateQueries({ queryKey: ['exams'] });
   qc.invalidateQueries({ queryKey: ['review', id] });
   qc.invalidateQueries({ queryKey: ['fairness', id] });
+  qc.invalidateQueries({ queryKey: ['results', id] });
+  qc.invalidateQueries({ queryKey: ['monitor', id] });
 }
 
 /** Publish with a readable list of failed checks when the server refuses. */

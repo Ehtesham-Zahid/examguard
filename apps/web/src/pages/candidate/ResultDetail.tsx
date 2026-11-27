@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { PolarAngleAxis, PolarGrid, Radar, RadarChart, ResponsiveContainer } from 'recharts';
 import { toast } from 'sonner';
-import { api, downloadFile, errMsg } from '@/lib/api';
+import { api, errMsg } from '@/lib/api';
+import { useDownload } from '@/components/ops/hooks';
 import { fmtDate, pct } from '@/lib/format';
 import { Badge, Button, Card, CardHeader, cx, ErrorBox, Field, Modal, Select, Spinner, Stat, Textarea } from '@/components/ui';
 import { DisputeBadge } from '@/components/status';
@@ -36,6 +37,7 @@ const CATS = [
 export default function ResultDetail() {
   const { attemptId = '' } = useParams();
   const qc = useQueryClient();
+  const dl = useDownload();
   const { data, isLoading, error, refetch } = useQuery({ queryKey: ['result', attemptId], queryFn: () => api<Detail>(`/candidate/attempts/${attemptId}/result`) });
   const [dispute, setDispute] = useState<{ questionId: string | null } | null>(null);
   const [revealed, setRevealed] = useState(() => {
@@ -76,7 +78,7 @@ export default function ResultDetail() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" icon={<MessageSquareWarning className="size-4" />} onClick={() => setDispute({ questionId: null })}>Raise a dispute</Button>
-          <Button icon={<Download className="size-4" />} onClick={() => downloadFile(`/reports/attempts/${attemptId}/pdf`, 'result.pdf')}>Download report</Button>
+          <Button icon={<Download className="size-4" />} loading={dl.busy !== null} onClick={() => dl.run(`/reports/attempts/${attemptId}/pdf`, 'result.pdf')}>Download report</Button>
         </div>
       </div>
 
@@ -99,7 +101,7 @@ export default function ResultDetail() {
               if (data.passed) confetti();
             }
           }}
-          ariaLabel="Result card — activate to reveal your score"
+          ariaLabel={revealed ? `Your score: ${data.attempt.score} out of ${data.attempt.maxScore}, ${p}%, ${data.passed ? 'passed' : 'not passed'}` : 'Result card — activate to reveal your score'}
           front={
             <div className="grid-paper relative flex h-full w-full flex-col items-center justify-center gap-2 overflow-hidden rounded-[18px] border-2 border-ink p-6 text-center">
               <span className="absolute inset-y-0 left-6 w-[1.5px] bg-margin/60" aria-hidden />

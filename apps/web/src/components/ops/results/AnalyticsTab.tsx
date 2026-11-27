@@ -43,7 +43,7 @@ export function AnalyticsTab({ data }: { data: AnalyticsData }) {
                 <Tooltip {...tooltipStyle} formatter={(v) => [`${v} candidate(s)`, 'Count']} />
                 <Bar dataKey="count" radius={[6, 6, 0, 0]} maxBarSize={44}>
                   {dist.map((d) => (
-                    <Cell key={d.label} fill={d.pass ? 'var(--accent)' : 'var(--warn)'} />
+                    <Cell key={d.label} fill={d.pass ? 'var(--ok)' : 'var(--warn)'} />
                   ))}
                   <LabelList dataKey="count" position="top" fill="var(--ink-2)" fontSize={12} formatter={(v: unknown) => (Number(v) ? String(v) : '')} />
                 </Bar>

@@ -27,7 +27,7 @@ interface AuditResp {
 const ENTITIES = ['User', 'Exam', 'Question', 'Attempt', 'Dispute', 'Incident', 'System'];
 const short = (h: string) => `${h.slice(0, 8)}…${h.slice(-4)}`;
 const actionTone = (a: string) =>
-  /delete|force|locked|reject|close|disable/.test(a) ? 'danger' : /publish|create|import|restore/.test(a) ? 'ok' : /update|extend|accommodation|blueprint|pause|resume/.test(a) ? 'info' : 'neutral';
+  /delete|force|locked|reject|close|disable|unpublish|revoke/.test(a) ? 'danger' : /publish|create|import|restore/.test(a) ? 'ok' : /update|extend|accommodation|blueprint|pause|resume/.test(a) ? 'info' : 'neutral';
 
 export default function AdminAudit() {
   const [entity, setEntity] = useState('');

@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { motion } from 'motion/react';
 import type { HTMLMotionProps } from 'motion/react';
+import { prefersReducedMotion } from '@/lib/motion';
 
 const FADE_FLOOR = 0.16;
 const FADE_PEAK = 0.62;
@@ -79,9 +80,6 @@ type Group = string | { key: number; letters: number[] };
 const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 
 const isSpace = (char: string) => /\s/.test(char);
-
-const prefersReducedMotion = () =>
-  typeof window !== 'undefined' && (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false);
 
 const glyphWidths = new Map<string, Map<string, number>>();
 let measureContext: CanvasRenderingContext2D | null = null;

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { AlertTriangle, Check, Clock, Laptop, MoreHorizontal, Send, Wifi, X } from 'lucide-react';
-import { api, errMsg } from '@/lib/api';
+import { api, ApiError, errMsg } from '@/lib/api';
 import { fmtTime, relative } from '@/lib/format';
 import { Badge, Button, cx, Field, Input, Modal, Textarea } from '@/components/ui';
 import { SeverityBadge } from '@/components/status';
@@ -18,6 +18,8 @@ export function useInvalidateOps() {
     qc.invalidateQueries({ queryKey: ['attempt'] });
     qc.invalidateQueries({ queryKey: ['results'] });
     qc.invalidateQueries({ queryKey: ['analytics'] });
+    qc.invalidateQueries({ queryKey: ['exam'] });
+    qc.invalidateQueries({ queryKey: ['exams'] });
   };
 }
 
@@ -265,7 +267,10 @@ export function CompensationCard({ c, name, attemptStatus }: { c: Compensation; 
       toast.success(approve ? `Restored ${fmtSec(c.seconds)} to ${name}` : 'Compensation rejected', { description: r.reopened ? 'The attempt was reopened — the candidate has been notified.' : undefined });
       invalidate();
     },
-    onError: (e) => toast.error(errMsg(e)),
+    onError: (e) => {
+      toast.error(errMsg(e));
+      if (e instanceof ApiError && e.status === 409) invalidate(); // already decided elsewhere: show the current state
+    },
   });
   const decided = c.status !== 'PENDING';
   const status = attemptStatus ?? c.attempt?.status;
@@ -309,7 +314,10 @@ export function TransferCard({ t, name, stale }: { t: Transfer; name: string; st
       toast.success(approve ? `${name} can continue on the new device` : 'Device switch rejected', { description: approve ? 'The old device has been signed out of the exam.' : 'The candidate stays on their original device.' });
       invalidate();
     },
-    onError: (e) => toast.error(errMsg(e)),
+    onError: (e) => {
+      toast.error(errMsg(e));
+      if (e instanceof ApiError && e.status === 409) invalidate(); // already decided elsewhere: show the current state
+    },
   });
   const decided = t.status !== 'PENDING';
   return (

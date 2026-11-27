@@ -2,6 +2,7 @@
 
 import { animate, cubicBezier, useInView } from 'motion/react';
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { prefersReducedMotion } from '@/lib/motion';
 
 type Easing = 'easeOut' | 'linear' | 'expo' | 'spring';
 
@@ -380,7 +381,7 @@ export default function CountUp({
       latestRef.current?.onEnd?.();
     };
 
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+    if (prefersReducedMotion()) {
       finish();
       return undefined;
     }

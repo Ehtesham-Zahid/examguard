@@ -9,6 +9,7 @@ import { useAuth } from '@/lib/auth';
 import { getSocket } from '@/lib/socket';
 import { relative } from '@/lib/format';
 import { cx, Kbd } from '@/components/ui';
+import { useThemeMode } from '@/lib/theme';
 import type { Role } from '@/lib/types';
 
 interface NavItem {
@@ -204,7 +205,8 @@ export function AppShell() {
   }, []);
   if (!user) return null;
   const items = NAV[user.role];
-  const dark = document.documentElement.dataset.theme !== 'light';
+  const mode = useThemeMode();
+  const dark = mode === 'dark';
   const roleLabel = { ADMIN: 'Administrator', EXAMINER: 'Examiner', CANDIDATE: 'Candidate' }[user.role];
 
   const sidebar = (
@@ -290,9 +292,12 @@ export function AppShell() {
             <Logo compact />
           </span>
           <div className="ml-auto flex items-center gap-1">
-            <button onClick={() => updatePrefs({ theme: dark ? 'light' : 'dark' })} className="rounded-lg p-2 text-ink-2 hover:bg-surface-2" aria-label={dark ? 'Switch to light theme' : 'Switch to dark theme'}>
-              {dark ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />}
-            </button>
+            {/* high contrast is an accessibility choice made in Settings: the quick toggle must not silently undo it */}
+            {mode !== 'contrast' && (
+              <button onClick={() => updatePrefs({ theme: dark ? 'light' : 'dark' })} className="rounded-lg p-2 text-ink-2 hover:bg-surface-2" aria-label={dark ? 'Switch to light theme' : 'Switch to dark theme'}>
+                {dark ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />}
+              </button>
+            )}
             <Notifications />
           </div>
         </header>

@@ -1,4 +1,5 @@
 import { Check, CheckCircle2, Cloud, CloudOff, Loader2, Wifi, WifiOff } from 'lucide-react';
+import { prefersReducedMotion } from '@/lib/motion';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Counter from '@/components/bits/Counter';
 import { cx } from '@/components/ui';
@@ -203,25 +204,46 @@ function useScrollProgress<T extends HTMLElement>() {
   const ref = useRef<T>(null);
   const [state, setState] = useState({ p: 0, y: 0 });
   useEffect(() => {
-    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches || document.documentElement.dataset.reduceMotion === 'true';
-    if (reduce) return setState({ p: 1, y: 0 });
+    if (prefersReducedMotion()) return setState({ p: 1, y: 0 });
     const update = () => {
       const el = ref.current;
       if (!el) return;
       const r = el.getBoundingClientRect();
       const vh = window.innerHeight;
+      // far off-screen: settle at the nearest end and skip re-rendering on every scroll tick
+      if (r.bottom < -200 || r.top > vh + 200) {
+        const settled = r.bottom < -200 ? 1 : 0;
+        return setState((s) => (s.p === settled ? s : { p: settled, y: s.y }));
+      }
       // starts when the plot's top enters the lower part of the screen, completes when its centre passes 40% height
       const start = vh * 0.9;
       const end = vh * 0.4 - r.height / 2;
       const p = Math.min(1, Math.max(0, (start - r.top) / (start - end)));
       setState((s) => (Math.abs(s.p - p) < 0.002 && Math.abs(s.y - window.scrollY) < 2 ? s : { p, y: window.scrollY }));
     };
+    // coalesce bursts of scroll events into one update per frame
+    let raf = 0;
+    let timer = 0;
+    const flush = () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(timer);
+      raf = timer = 0;
+      update();
+    };
+    const onScroll = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(flush);
+      // background/throttled tabs may not run rAF: fall back to a timer
+      timer = window.setTimeout(flush, 150);
+    };
     update();
-    window.addEventListener('scroll', update, { passive: true });
-    window.addEventListener('resize', update);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
     return () => {
-      window.removeEventListener('scroll', update);
-      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+      cancelAnimationFrame(raf);
+      clearTimeout(timer);
     };
   }, []);
   return [ref, state.p, state.y] as const;
@@ -281,7 +303,7 @@ export function FairnessPlot() {
       })}
       <div className="mt-3 flex justify-between font-mono text-[12px] text-muted">
         <span>easier paper</span>
-        <span className="text-margin">target</span>
+        <span className="font-bold text-danger">target</span>
         <span>harder paper</span>
       </div>
       <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-surface-2" role="progressbar" aria-label="Balancing progress" aria-valuenow={Math.round(p * 100)} aria-valuemin={0} aria-valuemax={100}>

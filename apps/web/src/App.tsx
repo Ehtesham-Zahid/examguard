@@ -1,5 +1,7 @@
 import { lazy, Suspense, type ReactNode } from 'react';
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { MotionConfig } from 'motion/react';
+import { localPrefs } from '@/lib/theme';
+import { Navigate, Route, Routes, useLocation, Outlet } from 'react-router-dom';
 import { useAuth } from '@/lib/auth';
 import type { Role } from '@/lib/types';
 import { AppShell } from '@/layouts/AppShell';
@@ -42,6 +44,18 @@ function Guard({ roles, children }: { roles?: Role[]; children: ReactNode }) {
   return <>{children}</>;
 }
 
+/** Unknown URLs: inside the app shell when signed in, a bare page for visitors (no forced login). */
+function MaybeShell() {
+  const { user, loading } = useAuth();
+  if (loading) return <Spinner />;
+  if (user) return <AppShell />;
+  return (
+    <div className="grid min-h-dvh place-items-center bg-bg p-6">
+      <Outlet />
+    </div>
+  );
+}
+
 function Home() {
   const { user, loading } = useAuth();
   if (loading) return <Spinner />;
@@ -51,7 +65,10 @@ function Home() {
 const STAFF: Role[] = ['ADMIN', 'EXAMINER'];
 
 export default function App() {
+  const { user } = useAuth();
+  const reduce = !!(user?.prefs?.reduceMotion ?? localPrefs().reduceMotion);
   return (
+    <MotionConfig reducedMotion={reduce ? 'always' : 'user'}>
     <Suspense fallback={<Spinner />}>
       <Routes>
         <Route path="/" element={<Landing />} />
@@ -93,9 +110,12 @@ export default function App() {
           <Route path="/candidate/results" element={<Guard roles={['CANDIDATE']}><MyResults /></Guard>} />
           <Route path="/candidate/results/:attemptId" element={<Guard roles={['CANDIDATE']}><ResultDetail /></Guard>} />
           <Route path="/candidate/disputes" element={<Guard roles={['CANDIDATE']}><MyDisputes /></Guard>} />
+        </Route>
+        <Route element={<MaybeShell />}>
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>
     </Suspense>
+    </MotionConfig>
   );
 }

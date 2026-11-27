@@ -18,7 +18,8 @@ const linkBtn = 'inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-[13px
 export default function ExaminerDashboard() {
   const { user } = useAuth();
   const exams = useQuery({ queryKey: ['exams'], queryFn: () => api<ExamListItem[]>('/exams'), refetchInterval: 30000 });
-  const disputes = useQuery({ queryKey: ['disputes', 'OPEN'], queryFn: () => api<DisputeLite[]>('/staff/disputes?status=OPEN') });
+  // "needs attention" = anything not yet decided (open or under review)
+  const disputes = useQuery({ queryKey: ['disputes', 'active'], queryFn: async () => (await api<(DisputeLite & { status: string })[]>('/staff/disputes')).filter((d) => d.status === 'OPEN' || d.status === 'UNDER_REVIEW') });
 
   const g = useMemo(() => {
     const all = exams.data ?? [];

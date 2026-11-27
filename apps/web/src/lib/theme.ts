@@ -19,6 +19,31 @@ export function applyPrefs(p: Prefs) {
   root.style.setProperty('--exam-leading', String(p.lineHeight ?? 1.65));
 }
 
+import { useEffect, useState } from 'react';
+
+/** Current resolved theme ('light' | 'dark' | 'contrast'), updated live when it changes. */
+export function useThemeMode() {
+  const read = () => (document.documentElement.dataset.theme as 'light' | 'dark' | 'contrast') || 'light';
+  const [mode, setMode] = useState(read);
+  useEffect(() => {
+    const mo = new MutationObserver(() => setMode(read()));
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => mo.disconnect();
+  }, []);
+  return mode;
+}
+
+/** Keep the "System" theme in sync with the OS. */
+export function watchSystemTheme() {
+  const mq = window.matchMedia('(prefers-color-scheme: dark)');
+  const h = () => {
+    const p = localPrefs();
+    if ((p.theme ?? 'system') === 'system') applyPrefs(p);
+  };
+  mq.addEventListener?.('change', h);
+  return () => mq.removeEventListener?.('change', h);
+}
+
 export function localPrefs(): Prefs {
   try {
     return JSON.parse(localStorage.getItem('eg_prefs') ?? '{}');
