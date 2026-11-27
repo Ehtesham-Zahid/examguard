@@ -10,6 +10,7 @@ import { param, parseBody, parseQuery } from '../core/validate.js';
 import { audit, verifyAuditChain } from '../core/audit.js';
 import { passwordSchema } from './auth.routes.js';
 import { loadExamForStaff } from '../core/policy.js';
+import { disconnectUser } from '../core/realtime.js';
 
 export const usersRouter = Router();
 usersRouter.use(authenticate);
@@ -76,6 +77,7 @@ usersRouter.patch('/:id', requireRole('ADMIN'), async (req, res) => {
     data: { ...body, ...(body.status === 'DISABLED' || (body.role && body.role !== before.role) ? { tokenVersion: { increment: 1 } } : {}) },
     select,
   });
+  if (body.status === 'DISABLED' || (body.role && body.role !== before.role)) disconnectUser(id);
   audit(me.id, 'user.update', 'User', id, { before: { role: before.role, status: before.status }, after: body });
   res.json({ user });
 });
@@ -84,6 +86,7 @@ usersRouter.post('/:id/reset-password', requireRole('ADMIN'), async (req, res) =
   const id = param(req, 'id');
   const password = tempPassword();
   await prisma.user.update({ where: { id }, data: { passwordHash: await bcrypt.hash(password, 10), mustChangePassword: true, tokenVersion: { increment: 1 }, failedLogins: 0, lockedUntil: null } });
+  disconnectUser(id);
   audit(currentUser(req).id, 'user.reset_password', 'User', id);
   res.json({ temporaryPassword: password });
 });
@@ -122,9 +125,9 @@ usersRouter.post('/import', requireRole('ADMIN', 'EXAMINER'), async (req, res) =
   if (rows.length > 2000) throw badRequest('Maximum 2000 rows per import');
 
   const seen = new Set<string>();
-  const existing = new Set((await prisma.user.findMany({ where: { email: { in: rows.map((r) => String(r.email ?? '').trim().toLowerCase()) } }, select: { email: true } })).map((u) => u.email));
+  const existing = new Set((await prisma.user.findMany({ where: { email: { in: rows.map((r) => String((r && typeof r === 'object' ? r.email : '') ?? '').trim().toLowerCase()) } }, select: { email: true } })).map((u) => u.email));
   const results = rows.map((raw, i) => {
-    const r = importRow.safeParse(raw);
+    const r = importRow.safeParse(raw && typeof raw === 'object' ? raw : {});
     const rowNo = body.format === 'csv' ? i + 2 : i + 1;
     if (!r.success) return { row: rowNo, ok: false, errors: r.error.issues.map((x) => `${x.path.join('.')}: ${x.message}`), data: raw };
     const errors: string[] = [];
@@ -137,15 +140,24 @@ usersRouter.post('/import', requireRole('ADMIN', 'EXAMINER'), async (req, res) =
   if (body.dryRun) return res.json({ total: rows.length, valid: valid.length, invalid: rows.length - valid.length, results });
 
   const created: { name: string; email: string; temporaryPassword: string }[] = [];
-  await prisma.$transaction(async (tx) => {
-    for (const r of valid) {
+  // hash outside the transaction (bcrypt is the slow part) so large imports don't hit the transaction timeout
+  const prepared = await Promise.all(
+    valid.map(async (r) => {
       const d = r.data as z.infer<typeof importRow>;
       const pw = d.password && d.password.length >= 8 ? d.password : tempPassword();
-      const u = await tx.user.create({ data: { name: d.name, email: d.email, role: 'CANDIDATE', groupName: d.group || null, passwordHash: await bcrypt.hash(pw, 8), mustChangePassword: true } });
-      if (body.enrollExamId) await tx.enrollment.create({ data: { examId: body.enrollExamId, candidateId: u.id } });
-      created.push({ name: d.name, email: d.email, temporaryPassword: pw });
-    }
-  });
+      return { d, pw, hash: await bcrypt.hash(pw, 8) };
+    }),
+  );
+  await prisma.$transaction(
+    async (tx) => {
+      for (const { d, pw, hash } of prepared) {
+        const u = await tx.user.create({ data: { name: d.name, email: d.email, role: 'CANDIDATE', groupName: d.group || null, passwordHash: hash, mustChangePassword: true } });
+        if (body.enrollExamId) await tx.enrollment.create({ data: { examId: body.enrollExamId, candidateId: u.id } });
+        created.push({ name: d.name, email: d.email, temporaryPassword: pw });
+      }
+    },
+    { timeout: 120_000, maxWait: 10_000 },
+  );
   audit(currentUser(req).id, 'user.import', 'User', null, { count: created.length });
   res.json({ total: rows.length, created: created.length, skipped: rows.length - created.length, credentials: created, results });
 });

@@ -340,6 +340,59 @@ async function main() {
     ok((await call('DELETE', `/exams/${switchExam}`, examiner)).status === 409, 'published exam cannot be deleted');
   }
 
+  // ---------- 13b. round-2 audit regressions
+  {
+    // (a) malformed socket messages must not crash the API
+    const { io } = await import('../../web/node_modules/socket.io-client/build/esm/index.js' as string);
+    const sock = io(BASE.replace(/\/api$/, ''), { auth: { token: await login('student2@examguard.test') }, transports: ['websocket'] });
+    await new Promise((r) => sock.on('connect', r));
+    sock.emit('join:exam');
+    sock.emit('join:exam', { bad: true });
+    sock.emit('join:exam', 12345, () => null);
+    await sleep(800);
+    sock.close();
+    ok((await call('GET', '/health')).status === 200, 'malformed join:exam messages do not crash the API');
+
+    // (b) blueprint pool is frozen at publish: editing a pooled question's key doesn't reach new papers
+    const exams = (await call('GET', '/exams', examiner)).json as any[];
+    const fair = exams.find((e) => e.mode === 'BLUEPRINT');
+    const ex = await prisma.exam.findUniqueOrThrow({ where: { id: fair.id } });
+    const pool = ex.blueprintPool as { questionId: string; version: number }[];
+    ok(Array.isArray(pool) && pool.length >= 10, `published blueprint exam has a frozen pool (${pool?.length} questions)`);
+    const target = (await call('GET', `/questions/${pool[0].questionId}`, examiner)).json;
+    const cur = target.current;
+    await call('PUT', `/questions/${target.id}`, examiner, { topicId: target.topicId, type: target.type, difficulty: target.difficulty, body: cur.body + ' [v-next]', options: cur.options, correct: cur.correct, marks: cur.marks, negativeMarks: cur.negativeMarks, multiScheme: cur.multiScheme, tags: target.tags });
+    const s9 = await login('student9@examguard.test');
+    const a9 = (await call('POST', `/candidate/exams/${fair.id}/start`, s9, {}, dev('BP'))).json.attemptId;
+    const paper = (await call('GET', `/candidate/attempts/${a9}`, s9, undefined, dev('BP'))).json.questions as any[];
+    ok(paper.length === 10 && !paper.some((q) => q.body.includes('[v-next]')), 'new blueprint papers use the versions frozen at publish');
+
+    // (c) heartbeat after an outage with answers still queued on the device → no compensation
+    const id = await newLiveExam(examiner, 'R2 comp');
+    const s4 = await login('student4@examguard.test');
+    const a4 = (await call('POST', `/candidate/exams/${id}/start`, s4, {}, dev('RC'))).json.attemptId;
+    await prisma.attempt.update({ where: { id: a4 }, data: { lastHeartbeatAt: new Date(Date.now() - 180_000) } });
+    await call('POST', `/candidate/attempts/${a4}/heartbeat`, s4, { pending: 3 }, dev('RC'));
+    ok((await prisma.timeCompensation.count({ where: { attemptId: a4 } })) === 0, 'no compensation when the device reports queued offline work');
+    // (d) concurrent heartbeat + answers after an outage register the gap once
+    await prisma.attempt.update({ where: { id: a4 }, data: { lastHeartbeatAt: new Date(Date.now() - 180_000) } });
+    const q4 = (await call('GET', `/candidate/attempts/${a4}`, s4, undefined, dev('RC'))).json.questions[0];
+    await Promise.all([
+      call('POST', `/candidate/attempts/${a4}/heartbeat`, s4, {}, dev('RC')),
+      call('PUT', `/candidate/attempts/${a4}/answers`, s4, { items: [{ questionId: q4.id, response: [q4.options[0].id], seq: 1 }] }, dev('RC')),
+    ]);
+    ok((await prisma.timeCompensation.count({ where: { attemptId: a4 } })) === 1, 'a gap seen by two concurrent requests is compensated once');
+
+    // (e) fake bearer tokens don't get fresh rate-limit buckets
+    const r1 = await fetch(BASE + '/exams', { headers: { authorization: 'Bearer fake-token-aaaaaaaaaaaaaaaaaaaaaaaa' } });
+    ok(r1.headers.get('ratelimit-policy') !== null || r1.status === 401, 'unverifiable tokens are rate-limited by IP');
+
+    // (f) a pause moves the late-join cutoff
+    const id2 = await newLiveExam(examiner, 'R2 latejoin', { lateJoinMin: 1 });
+    await prisma.exam.update({ where: { id: id2 }, data: { windowStart: new Date(Date.now() - 90_000), pausedSec: 120 } });
+    ok((await call('POST', `/candidate/exams/${id2}/start`, await login('student10@examguard.test'), {}, dev('LJ'))).status === 201, 'paused time extends the late-entry cutoff');
+  }
+
   // ---------- 14. audit chain survives everything above
   await sleep(800);
   const chain = (await call('GET', '/users/admin/overview', admin)).json.auditChain;

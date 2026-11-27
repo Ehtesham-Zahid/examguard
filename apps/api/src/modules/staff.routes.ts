@@ -9,7 +9,7 @@ import { examPhase, readSettings } from '../domain/examPhase.js';
 import { finalAnswerScore, selectedIds, validateManualScore } from '../domain/marking.js';
 import { PRIOR } from '../domain/fairness.js';
 import { jaccard, shingles } from '../domain/similarity.js';
-import { correctFor, finalizeAttempt, gradeAttempt } from '../services/attempts.service.js';
+import { correctFor, extendDeadline, finalizeAttempt, gradeAttempt } from '../services/attempts.service.js';
 import { issueCertificate } from '../services/certificates.service.js';
 import { audit } from '../core/audit.js';
 import { emitToMonitors, emitToUser } from '../core/realtime.js';
@@ -116,7 +116,7 @@ staffRouter.post('/attempts/:id/extend', async (req, res) => {
   const attempt = await loadAttemptForStaff(me, param(req, 'id'));
   const { minutes, reason } = parseBody(z.object({ minutes: z.number().int().min(1).max(120), reason: z.string().trim().min(3, 'A reason is required').max(300) }), req);
   if (attempt.status !== 'IN_PROGRESS') throw conflict('Only in-progress attempts can be extended');
-  const updated = await prisma.attempt.update({ where: { id: attempt.id }, data: { deadline: new Date(attempt.deadline.getTime() + minutes * 60000), extraTimeSec: { increment: minutes * 60 } } });
+  const updated = await extendDeadline(attempt.id, minutes * 60);
   await prisma.attemptEvent.create({ data: { attemptId: attempt.id, type: 'time_extended', payload: { minutes, reason, by: me.name } } });
   emitToUser(attempt.candidateId, 'attempt:deadline', { attemptId: attempt.id, deadline: updated.deadline, message: `Your examiner added ${minutes} minute(s)` });
   audit(me.id, 'attempt.extend', 'Attempt', attempt.id, { minutes, reason });
@@ -158,7 +158,7 @@ staffRouter.post('/compensations/:id/decide', async (req, res) => {
   let reopened = false;
   if (approve) {
     if (attempt.status === 'IN_PROGRESS') {
-      const d = await prisma.attempt.update({ where: { id: attempt.id }, data: { deadline: new Date(attempt.deadline.getTime() + grant * 1000), extraTimeSec: { increment: grant } } });
+      const d = await extendDeadline(attempt.id, grant);
       emitToUser(attempt.candidateId, 'attempt:deadline', { attemptId: attempt.id, deadline: d.deadline, message: `Time restored after a connection problem: +${Math.round(grant / 60)} min` });
     } else if (attempt.status === 'AUTO_SUBMITTED' && !attempt.exam.resultsPublishedAt) {
       await prisma.attempt.update({ where: { id: attempt.id }, data: { status: 'IN_PROGRESS', submittedAt: null, deadline: new Date(Date.now() + grant * 1000), extraTimeSec: { increment: grant }, activeSessionId: null, lastHeartbeatAt: new Date() } });
@@ -264,7 +264,7 @@ staffRouter.get('/exams/:id/results', async (req, res) => {
     attempts: attempts.map((a) => ({
       id: a.id, candidate: a.candidate, status: a.status, score: a.score, maxScore: a.maxScore, gradingStatus: a.gradingStatus,
       submittedAt: a.submittedAt, startedAt: a.startedAt, durationSec: a.submittedAt ? Math.round((a.submittedAt.getTime() - a.startedAt.getTime()) / 1000) : null,
-      passed: (a.score ?? 0) >= exam.passMarks, rank: ranked.findIndex((x) => x.id === a.id) + 1 || null, integrityScore: a.integrityScore, incidents: a._count.incidents, certificateCode: a.certificate?.code,
+      passed: (a.score ?? 0) >= exam.passMarks, rank: a.status === 'IN_PROGRESS' ? null : ranked.filter((x) => (x.score ?? 0) > (a.score ?? 0)).length + 1, integrityScore: a.integrityScore, incidents: a._count.incidents, certificateCode: a.certificate?.code,
     })),
   });
 });

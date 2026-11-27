@@ -179,6 +179,8 @@ model Exam {
   status       ExamStatus @default(DRAFT)
   mode         ExamMode   @default(FIXED)
   blueprint    Json? // [{topicId, difficulty, count, marks}]
+  blueprintPool Json? // [{questionId, version}] frozen at publish so later bank edits never change a published exam
+  pausedSec    Int        @default(0) // total time the exam has been paused (moves the late-join cutoff)
   settings     Json       @default("{}")
   accessCode   String?
   pausedAt     DateTime?

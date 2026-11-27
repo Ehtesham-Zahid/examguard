@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../core/prisma.js';
 import { authenticate, currentUser, requireRole } from '../core/auth.js';
 import { badRequest, conflict } from '../core/errors.js';
@@ -8,7 +8,7 @@ import { param, parseBody } from '../core/validate.js';
 import { loadExamForStaff } from '../core/policy.js';
 import { defaultSettings, examPhase, readSettings } from '../domain/examPhase.js';
 import { averageOverlap, easiness, generateFairPaper, generateNaivePaper, stats, targetDifficulty, validateBlueprint, type PoolQuestion, type Slot } from '../domain/fairness.js';
-import { finalizeAttempt, recomputeExamTotals } from '../services/attempts.service.js';
+import { finalizeAttempt, recomputeExamTotals, snapshotBlueprintPool } from '../services/attempts.service.js';
 import { audit } from '../core/audit.js';
 import { emitToCandidates, emitToMonitors } from '../core/realtime.js';
 import { notify } from '../core/notify.js';
@@ -88,7 +88,7 @@ examsRouter.get('/:id', async (req, res) => {
     phase: examPhase(exam),
     stats: sum(exam.id),
     questions: questions.map((eq) => {
-      const v = eq.question.versions.find((x) => x.version === eq.question.currentVersion)!;
+      const v = eq.question.versions.find((x) => x.version === (eq.version ?? eq.question.currentVersion))!;
       return { id: eq.question.id, position: eq.position, type: eq.question.type, difficulty: eq.question.difficulty, topic: eq.question.topic.name, body: v.body, marks: v.marks, options: v.options, correct: v.correct, version: v.version };
     }),
   });
@@ -147,8 +147,9 @@ examsRouter.put('/:id/questions', async (req, res) => {
 
 const slotSchema = z.object({ topicId: z.string(), difficulty: z.enum(['EASY', 'MEDIUM', 'HARD']), count: z.number().int().min(1).max(100), marks: z.number().positive().max(100) });
 
-async function poolFor(slots: Slot[], ownerId: string | null) {
-  const qs = await prisma.question.findMany({ where: { archived: false, type: { in: ['SINGLE', 'MULTI', 'WRITTEN'] }, ...(ownerId ? { ownerId } : {}), OR: slots.length ? slots.map((s) => ({ topicId: s.topicId, difficulty: s.difficulty as 'EASY' })) : undefined } });
+async function poolFor(slots: Slot[], ownerId: string | null, frozen?: unknown) {
+  const ids = (frozen as { questionId: string }[] | null | undefined)?.map((f) => f.questionId);
+  const qs = await prisma.question.findMany({ where: ids ? { id: { in: ids } } : { archived: false, type: { in: ['SINGLE', 'MULTI', 'WRITTEN'] }, ...(ownerId ? { ownerId } : {}), OR: slots.length ? slots.map((s) => ({ topicId: s.topicId, difficulty: s.difficulty as 'EASY' })) : undefined } });
   return qs.map((q) => ({ id: q.id, topicId: q.topicId, difficulty: q.difficulty, p: easiness(q) })) as PoolQuestion[];
 }
 
@@ -171,7 +172,7 @@ examsRouter.get('/:id/fairness', async (req, res) => {
   const exam = await loadExamForStaff(me, param(req, 'id'));
   if (exam.mode !== 'BLUEPRINT' || !exam.blueprint) return res.json({ mode: exam.mode, message: 'Fairness analysis applies to blueprint-based randomised exams' });
   const slots = exam.blueprint as unknown as Slot[];
-  const pool = await poolFor(slots, exam.ownerId);
+  const pool = await poolFor(slots, exam.ownerId, exam.status !== 'DRAFT' ? exam.blueprintPool : undefined);
   const N = 40;
   const usage = new Map<string, number>();
   const fair = Array.from({ length: N }, (_, i) => {
@@ -225,7 +226,7 @@ async function reviewChecklist(examId: string) {
 
 examsRouter.get('/:id/review', async (req, res) => {
   const exam = await loadExamForStaff(currentUser(req), param(req, 'id'));
-  await recomputeExamTotals(exam.id);
+  if (exam.status === 'DRAFT') await recomputeExamTotals(exam.id);
   res.json(await reviewChecklist(exam.id));
 });
 
@@ -237,10 +238,11 @@ examsRouter.post('/:id/publish', async (req, res) => {
   const review = await reviewChecklist(exam.id);
   if (!review.canPublish) throw badRequest('Fix the blocking issues before publishing', review.checks.filter((c) => !c.ok && c.blocking));
   const pinned = await prisma.examQuestion.findMany({ where: { examId: exam.id }, include: { question: { select: { currentVersion: true } } } });
-  const [updated] = await prisma.$transaction([
-    prisma.exam.update({ where: { id: exam.id }, data: { status: 'PUBLISHED', publishedAt: new Date() } }),
-    ...pinned.map((eq) => prisma.examQuestion.update({ where: { id: eq.id }, data: { version: eq.question.currentVersion } })),
-  ]);
+  const updated = await prisma.$transaction(async (tx) => {
+    for (const eq of pinned) await tx.examQuestion.update({ where: { id: eq.id }, data: { version: eq.question.currentVersion } });
+    if (exam.mode === 'BLUEPRINT') await snapshotBlueprintPool(tx, exam);
+    return tx.exam.update({ where: { id: exam.id }, data: { status: 'PUBLISHED', publishedAt: new Date() } });
+  });
   const enrolled = await prisma.enrollment.findMany({ where: { examId: exam.id }, select: { candidateId: true } });
   await notify(enrolled.map((e) => e.candidateId), 'New examination scheduled', `${exam.title} opens ${exam.windowStart.toUTCString()}`, `/candidate/exams/${exam.id}`);
   audit(me.id, 'exam.publish', 'Exam', exam.id);
@@ -256,6 +258,7 @@ examsRouter.post('/:id/unpublish', async (req, res) => {
   const [updated] = await prisma.$transaction([
     prisma.exam.update({ where: { id: exam.id }, data: { status: 'DRAFT', publishedAt: null } }),
     prisma.examQuestion.updateMany({ where: { examId: exam.id }, data: { version: null } }),
+    prisma.exam.update({ where: { id: exam.id }, data: { blueprintPool: Prisma.DbNull } }),
   ]);
   audit(me.id, 'exam.unpublish', 'Exam', exam.id);
   res.json(updated);
@@ -288,7 +291,7 @@ examsRouter.post('/:id/duplicate', async (req, res) => {
   const qs = await prisma.examQuestion.findMany({ where: { examId: exam.id } });
   const copy = await prisma.exam.create({
     data: {
-      ownerId: me.id, title: `${exam.title} (copy)`, description: exam.description, instructions: exam.instructions,
+      ownerId: me.role === 'ADMIN' ? exam.ownerId : me.id, title: `${exam.title} (copy)`, description: exam.description, instructions: exam.instructions,
       windowStart: new Date(Date.now() + 86400_000), windowEnd: new Date(Date.now() + 86400_000 + exam.durationMin * 60000 * 2),
       durationMin: exam.durationMin, passMarks: exam.passMarks, mode: exam.mode, blueprint: exam.blueprint ?? undefined, settings: exam.settings as Prisma.InputJsonValue, totalMarks: exam.totalMarks,
       questions: { create: qs.map((q) => ({ questionId: q.questionId, position: q.position })) },
@@ -322,7 +325,7 @@ examsRouter.post('/:id/resume', async (req, res) => {
   const active = await prisma.attempt.findMany({ where: { examId: exam.id, status: 'IN_PROGRESS' } });
   await prisma.$transaction([
     ...active.map((a) => prisma.attempt.update({ where: { id: a.id }, data: { deadline: new Date(a.deadline.getTime() + pausedSec * 1000), extraTimeSec: { increment: pausedSec }, lastHeartbeatAt: new Date() } })),
-    prisma.exam.update({ where: { id: exam.id }, data: { pausedAt: null, windowEnd: new Date(exam.windowEnd.getTime() + pausedSec * 1000) } }),
+    prisma.exam.update({ where: { id: exam.id }, data: { pausedAt: null, windowEnd: new Date(exam.windowEnd.getTime() + pausedSec * 1000), pausedSec: { increment: pausedSec } } }),
   ]);
   emitToCandidates(exam.id, 'exam:resumed', { addedSec: pausedSec });
   emitToMonitors(exam.id, 'exam:resumed', {});
@@ -363,8 +366,10 @@ examsRouter.post('/:id/enrollments', async (req, res) => {
     body.emails.forEach((e) => !found.some((f) => f.email === e.toLowerCase()) && unknownEmails.push(e));
   }
   const valid = await prisma.user.findMany({ where: { id: { in: [...ids] }, role: 'CANDIDATE' }, select: { id: true } });
+  const already = new Set((await prisma.enrollment.findMany({ where: { examId: exam.id, candidateId: { in: valid.map((v) => v.id) } }, select: { candidateId: true } })).map((e) => e.candidateId));
   const result = await prisma.enrollment.createMany({ data: valid.map((u) => ({ examId: exam.id, candidateId: u.id })), skipDuplicates: true });
-  if (exam.status === 'PUBLISHED') await notify(valid.map((v) => v.id), 'You have been enrolled', exam.title, `/candidate/exams/${exam.id}`);
+  const added = valid.map((v) => v.id).filter((id) => !already.has(id));
+  if (exam.status === 'PUBLISHED' && added.length) await notify(added, 'You have been enrolled', exam.title, `/candidate/exams/${exam.id}`);
   audit(me.id, 'exam.enroll', 'Exam', exam.id, { added: result.count });
   res.json({ added: result.count, alreadyEnrolled: valid.length - result.count, unknownEmails });
 });

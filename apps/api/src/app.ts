@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import jwt from 'jsonwebtoken';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -31,7 +32,17 @@ export function createApp() {
       limit: 600,
       standardHeaders: true,
       legacyHeaders: false,
-      keyGenerator: (req) => req.headers.authorization?.slice(-24) ?? ipKeyGenerator(req.ip ?? ''),
+      keyGenerator: (req) => {
+        const h = req.headers.authorization;
+        if (h?.startsWith('Bearer ')) {
+          try {
+            return `u:${(jwt.verify(h.slice(7), config.jwtSecret) as { sub: string }).sub}`;
+          } catch {
+            /* fall through to IP */
+          }
+        }
+        return ipKeyGenerator(req.ip ?? '');
+      },
       message: { error: { code: 'RATE_LIMIT', message: 'Too many requests, slow down' } },
     }),
   );

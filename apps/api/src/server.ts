@@ -4,6 +4,9 @@ import { config } from './core/config.js';
 import { initRealtime } from './core/realtime.js';
 import { startExpirySweeper } from './services/attempts.service.js';
 
+process.on('unhandledRejection', (e) => console.error('unhandledRejection', e));
+process.on('uncaughtException', (e) => console.error('uncaughtException', e));
+
 const server = http.createServer(createApp());
 initRealtime(server);
 startExpirySweeper();

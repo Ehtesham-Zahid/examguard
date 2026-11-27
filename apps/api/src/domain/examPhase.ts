@@ -38,9 +38,8 @@ export const readSettings = (s: unknown): ExamSettings => ({ ...defaultSettings,
 
 /** Attempt deadline = min(start + duration * (1 + accommodation) + compensation, window end) */
 export function computeDeadline(startedAt: Date, durationMin: number, extraTimePct: number, windowEnd: Date, extraSec = 0) {
-  const ms = durationMin * 60_000 * (1 + extraTimePct / 100) + extraSec * 1000;
-  const d = new Date(startedAt.getTime() + ms);
-  // accommodations & compensations may extend past the window, base duration may not
-  const windowCap = new Date(windowEnd.getTime() + extraSec * 1000 + durationMin * 60_000 * (extraTimePct / 100));
-  return d < windowCap ? d : windowCap;
+  // base time is the duration, or whatever is left of the window if the candidate starts late;
+  // accommodations scale that base time, and compensations are added on top
+  const base = Math.max(0, Math.min(durationMin * 60_000, windowEnd.getTime() - startedAt.getTime()));
+  return new Date(startedAt.getTime() + base * (1 + extraTimePct / 100) + extraSec * 1000);
 }

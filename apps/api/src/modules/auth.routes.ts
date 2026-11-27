@@ -8,6 +8,7 @@ import { badRequest, unauthorized } from '../core/errors.js';
 import { parseBody } from '../core/validate.js';
 import { config } from '../core/config.js';
 import { audit } from '../core/audit.js';
+import { disconnectUser } from '../core/realtime.js';
 
 export const authRouter = Router();
 const COOKIE = 'eg_refresh';
@@ -93,6 +94,7 @@ authRouter.post('/logout', (_req, res) => {
 authRouter.post('/logout-all', authenticate, async (req, res) => {
   const u = currentUser(req);
   await prisma.user.update({ where: { id: u.id }, data: { tokenVersion: { increment: 1 } } });
+  disconnectUser(u.id);
   res.clearCookie(COOKIE, { path: '/api/auth' });
   audit(u.id, 'auth.logout_all', 'User', u.id);
   res.json({ ok: true });

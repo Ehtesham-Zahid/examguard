@@ -7,7 +7,7 @@ import { badRequest, conflict, forbidden, notFound } from '../core/errors.js';
 import { param, parseBody } from '../core/validate.js';
 import { loadOwnAttempt } from '../core/policy.js';
 import { examPhase, readSettings } from '../domain/examPhase.js';
-import { finalizeAttempt, gradeAttempt, startAttempt } from '../services/attempts.service.js';
+import { extendDeadline, finalizeAttempt, gradeAttempt, startAttempt } from '../services/attempts.service.js';
 import { recordEvents } from '../services/integrity.service.js';
 import { emitToMonitors } from '../core/realtime.js';
 import { audit } from '../core/audit.js';
@@ -159,11 +159,28 @@ candidateRouter.get('/attempts/:id', async (req, res) => {
 });
 
 /** Records contact with the client. Detects connectivity gaps (> 30s of silence) for resilience evidence. */
+/**
+ * Offline work arrived for an outage that was already compensated: the candidate wasn't actually
+ * stopped from working, so withdraw recent suggestions (and claw back auto-approved time).
+ */
+async function withdrawCompensations(attemptId: string) {
+  const recent = await prisma.timeCompensation.findMany({ where: { attemptId, status: { in: ['PENDING', 'APPROVED'] }, decidedById: null, createdAt: { gt: new Date(Date.now() - 30 * 60_000) } } });
+  for (const c of recent) {
+    const claimed = await prisma.timeCompensation.updateMany({ where: { id: c.id, status: c.status }, data: { status: 'REJECTED', reason: `${c.reason} — withdrawn: offline answers show work continued during the outage`, decidedAt: new Date() } });
+    if (claimed.count && c.status === 'APPROVED') await extendDeadline(attemptId, -c.seconds);
+  }
+}
+
 async function registerContact(attempt: { id: string; examId: string; lastHeartbeatAt: Date | null; deadline: Date; isSandbox: boolean }) {
   const now = new Date();
   const last = attempt.lastHeartbeatAt ?? now;
   const gapMs = now.getTime() - last.getTime();
-  await prisma.attempt.update({ where: { id: attempt.id }, data: { lastHeartbeatAt: now } });
+  const claim = await prisma.attempt.updateMany({ where: { id: attempt.id, lastHeartbeatAt: attempt.lastHeartbeatAt }, data: { lastHeartbeatAt: now } });
+  if (claim.count === 0) {
+    // a concurrent request already registered this contact (and any gap): don't double-count it
+    await prisma.attempt.update({ where: { id: attempt.id }, data: { lastHeartbeatAt: now } });
+    return null;
+  }
   if (gapMs > GAP_THRESHOLD_MS) {
     const remainingAtGapStartSec = Math.max(0, Math.round((attempt.deadline.getTime() - last.getTime()) / 1000));
     await prisma.attemptEvent.create({ data: { attemptId: attempt.id, type: 'connectivity_gap', payload: { from: last.toISOString(), to: now.toISOString(), seconds: Math.round(gapMs / 1000), remainingAtGapStartSec } } });
@@ -195,10 +212,7 @@ async function suggestCompensation(attempt: { id: string; examId: string; isSand
       decidedAt: s.autoCompensate ? new Date() : null,
     },
   });
-  if (s.autoCompensate) {
-    const a = await prisma.attempt.findUniqueOrThrow({ where: { id: attempt.id } });
-    await prisma.attempt.update({ where: { id: attempt.id }, data: { deadline: new Date(a.deadline.getTime() + seconds * 1000), extraTimeSec: { increment: seconds } } });
-  }
+  if (s.autoCompensate) await extendDeadline(attempt.id, seconds);
   emitToMonitors(attempt.examId, 'compensation:new', { attemptId: attempt.id, compensationId: comp.id });
   return comp;
 }
@@ -287,6 +301,7 @@ candidateRouter.put('/attempts/:id/answers', async (req, res) => {
   if (offlineAccepted) await prisma.attemptEvent.create({ data: { attemptId: attempt.id, type: inTime ? 'offline_answers_synced' : 'offline_answers_merged_after_deadline', payload: { count: offlineAccepted } } });
   if (attempt.status === 'AUTO_SUBMITTED' && offlineAccepted) await prisma.$transaction((tx) => gradeAttempt(tx, attempt.id));
   if (gap) await suggestCompensation(attempt, gap, offlineAccepted);
+  else if (offlineAccepted) await withdrawCompensations(attempt.id);
   if (!attempt.isSandbox) emitToMonitors(attempt.examId, 'attempt:progress', { attemptId: attempt.id });
   res.json({ serverNow: Date.now(), deadline: attempt.deadline, accepted, rejected });
 });
@@ -295,9 +310,10 @@ candidateRouter.post('/attempts/:id/heartbeat', async (req, res) => {
   const attempt = await ownActiveAttempt(req);
   if (attempt.status !== 'IN_PROGRESS') return res.json({ serverNow: Date.now(), status: attempt.status, deadline: attempt.deadline });
   assertSession(attempt, req);
-  const body = parseBody(z.object({ currentQuestion: z.number().int().min(0).max(1000).optional(), answered: z.number().int().min(0).max(1000).optional(), online: z.boolean().optional() }), req);
+  const body = parseBody(z.object({ currentQuestion: z.number().int().min(0).max(1000).optional(), answered: z.number().int().min(0).max(1000).optional(), online: z.boolean().optional(), pending: z.number().int().min(0).max(10000).optional() }), req);
   const gap = await registerContact(attempt);
-  if (gap) await suggestCompensation(attempt, gap, 0);
+  // queued answers mean the candidate kept working offline: no lost time to compensate
+  if (gap) await suggestCompensation(attempt, gap, body.pending ?? 0);
   const fresh = await prisma.attempt.findUniqueOrThrow({ where: { id: attempt.id }, include: { exam: { select: { pausedAt: true } } } });
   if (!attempt.isSandbox) emitToMonitors(attempt.examId, 'attempt:heartbeat', { attemptId: attempt.id, currentQuestion: body.currentQuestion, answered: body.answered, at: Date.now() });
   res.json({ serverNow: Date.now(), status: fresh.status, deadline: fresh.deadline, paused: !!fresh.exam.pausedAt });
@@ -376,7 +392,8 @@ candidateRouter.get('/attempts/:id/result', requireRole('CANDIDATE'), async (req
     passed: (attempt.score ?? 0) >= attempt.exam.passMarks,
     rank,
     totalCandidates: scores.length,
-    percentile: scores.length ? Math.round(((scores.length - rank) / scores.length) * 100) : null,
+    // share of candidates with a strictly lower score (ties don't inflate it)
+    percentile: scores.length ? Math.round((scores.filter((x) => x < (attempt.score ?? 0)).length / scores.length) * 100) : null,
     topics: Object.entries(topics).map(([name, v]) => ({ name, ...v, pct: v.max ? Math.round((v.scored / v.max) * 100) : 0 })),
     certificateCode: cert?.code,
     disputes,

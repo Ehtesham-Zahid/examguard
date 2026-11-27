@@ -1,7 +1,7 @@
 import { PrismaClient, type Difficulty, type QuestionType } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import crypto from 'node:crypto';
-import { buildPaper, gradeAttempt } from '../src/services/attempts.service.js';
+import { buildPaper, gradeAttempt, snapshotBlueprintPool } from '../src/services/attempts.service.js';
 import { issueCertificate } from '../src/services/certificates.service.js';
 import { defaultSettings } from '../src/domain/examPhase.js';
 import { rng } from '../src/domain/random.js';
@@ -175,8 +175,9 @@ async function main() {
     },
   });
 
-  // published exams pin their question versions (as POST /exams/:id/publish does)
+  // published exams pin their question versions and freeze blueprint pools (as POST /exams/:id/publish does)
   await prisma.examQuestion.updateMany({ where: { exam: { status: { not: 'DRAFT' } } }, data: { version: 1 } });
+  await prisma.$transaction((tx) => snapshotBlueprintPool(tx, fairExam));
 
   for (const e of [live, fairExam, done, grading, upcoming]) {
     await prisma.enrollment.createMany({ data: candidates.map((c, i) => ({ examId: e.id, candidateId: c.id, extraTimePct: i === 3 ? 25 : 0 })) });
@@ -201,7 +202,7 @@ async function main() {
         const paper = await buildPaper(tx, exam, crypto.randomUUID());
         return tx.attempt.create({
           data: {
-            examId, candidateId: c.id, startedAt: started, deadline: new Date(started.getTime() + exam.durationMin * 60000), submittedAt: new Date(started.getTime() + (25 + r() * 30) * 60000),
+            examId, candidateId: c.id, startedAt: started, deadline: new Date(started.getTime() + exam.durationMin * 60000), submittedAt: new Date(started.getTime() + exam.durationMin * (0.55 + r() * 0.43) * 60000),
             status: i === 4 ? 'AUTO_SUBMITTED' : 'SUBMITTED', maxScore: paper.items.reduce((s, x) => s + x.marks, 0), paperDifficulty: paper.difficulty, lastHeartbeatAt: started,
             integrityScore: i === 5 ? 76 : 100 - Math.floor(r() * 8), violationCount: i === 5 ? 4 : 0,
             questions: { create: paper.items.map((it, idx) => ({ position: idx + 1, questionVersionId: it.v.id, optionOrder: (it.v.options as { id: string }[]).map((o) => o.id), marks: it.marks, negativeMarks: it.negativeMarks, multiScheme: it.v.multiScheme })) },

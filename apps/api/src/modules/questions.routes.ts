@@ -4,7 +4,7 @@ import Papa from 'papaparse';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../core/prisma.js';
 import { authenticate, currentUser, requireRole } from '../core/auth.js';
-import { badRequest, conflict } from '../core/errors.js';
+import { badRequest } from '../core/errors.js';
 import { param, parseBody, parseQuery } from '../core/validate.js';
 import { loadQuestionForStaff } from '../core/policy.js';
 import { audit } from '../core/audit.js';
@@ -140,10 +140,7 @@ questionsRouter.put('/:id', async (req, res) => {
   const existing = await loadQuestionForStaff(me, param(req, 'id'));
   const body = parseBody(questionInput, req);
   if (body.type !== existing.type) throw badRequest('Question type cannot be changed after creation; create a new question instead');
-  const newTopic = body.topicId ?? (body.topicName ? (await prisma.topic.findUnique({ where: { name: body.topicName.trim() } }))?.id : undefined);
-  if (newTopic !== existing.topicId || body.difficulty !== existing.difficulty) {
-    if (await usedByActiveBlueprint(existing)) throw conflict('This question feeds a published randomised exam — its topic and difficulty are locked until that exam completes. You can still edit the wording.');
-  }
+  // published exams (fixed and blueprint) pin question versions at publish, so bank edits never reach them
   const q = await prisma.$transaction(async (tx) => {
     const topicId = await resolveTopic(tx, body);
     const next = existing.currentVersion + 1;
@@ -153,11 +150,6 @@ questionsRouter.put('/:id', async (req, res) => {
   audit(me.id, 'question.update', 'Question', q.id, { version: q.currentVersion });
   res.json(shape(q));
 });
-
-async function usedByActiveBlueprint(q: { ownerId: string; topicId: string; difficulty: string }) {
-  const exams = await prisma.exam.findMany({ where: { ownerId: q.ownerId, mode: 'BLUEPRINT', status: 'PUBLISHED', windowEnd: { gt: new Date() } }, select: { blueprint: true } });
-  return exams.some((e) => ((e.blueprint as { topicId: string; difficulty: string }[] | null) ?? []).some((s) => s.topicId === q.topicId && s.difficulty === q.difficulty));
-}
 
 questionsRouter.post('/:id/archive', async (req, res) => {
   const me = currentUser(req);
@@ -246,7 +238,7 @@ questionsRouter.post('/import', async (req, res) => {
       const topicId = await resolveTopic(tx, d);
       await tx.question.create({ data: { ownerId: me.id, topicId, type: d.type, difficulty: d.difficulty, tags: d.tags, versions: { create: { version: 1, ...versionData(d) } } } });
     }
-  });
+  }, { timeout: 120_000, maxWait: 10_000 });
   audit(me.id, 'question.import', 'Question', null, { count: valid.length });
   res.json({ total: raw.length, created: valid.length, skipped: raw.length - valid.length, results: results.map((r) => ({ ...r, data: undefined })) });
 });

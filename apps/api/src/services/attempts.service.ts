@@ -12,14 +12,29 @@ import { audit } from '../core/audit.js';
 type Tx = Prisma.TransactionClient;
 
 /** Build the frozen question list for a new attempt (fixed list or fair blueprint). */
-export async function buildPaper(tx: Tx, exam: { id: string; ownerId: string; status: string; mode: string; blueprint: unknown; settings: unknown }, seed: string) {
+/** Freeze the blueprint's question pool ({questionId, version}) when an exam is published. */
+export async function snapshotBlueprintPool(tx: Tx, exam: { id: string; ownerId: string; blueprint: unknown }) {
+  const slots = (exam.blueprint as Slot[] | null) ?? [];
+  const qs = await tx.question.findMany({
+    where: { archived: false, ownerId: exam.ownerId, OR: slots.length ? slots.map((s) => ({ topicId: s.topicId, difficulty: s.difficulty as 'EASY' })) : undefined },
+    select: { id: true, currentVersion: true },
+  });
+  const pool = qs.map((q) => ({ questionId: q.id, version: q.currentVersion }));
+  await tx.exam.update({ where: { id: exam.id }, data: { blueprintPool: pool } });
+  return pool;
+}
+
+export async function buildPaper(tx: Tx, exam: { id: string; ownerId: string; status: string; mode: string; blueprint: unknown; blueprintPool?: unknown; settings: unknown }, seed: string) {
   const settings = readSettings(exam.settings);
   const rand = rng(seed);
 
   if (exam.mode === 'BLUEPRINT') {
     const slots = (exam.blueprint as Slot[] | null) ?? [];
+    // published exams draw only from the pool frozen at publish, at the pinned versions; drafts (sandbox) use the live bank
+    const frozen = exam.status !== 'DRAFT' ? ((exam.blueprintPool as { questionId: string; version: number }[] | null) ?? null) : null;
+    const pinned = new Map(frozen?.map((f) => [f.questionId, f.version]) ?? []);
     const questions = await tx.question.findMany({
-      where: { ...(exam.status === 'DRAFT' ? { archived: false } : {}), ownerId: exam.ownerId, OR: slots.map((s) => ({ topicId: s.topicId, difficulty: s.difficulty as 'EASY' })) },
+      where: frozen ? { id: { in: [...pinned.keys()] } } : { archived: false, ownerId: exam.ownerId, OR: slots.map((s) => ({ topicId: s.topicId, difficulty: s.difficulty as 'EASY' })) },
       include: { versions: true },
     });
     const pool: PoolQuestion[] = questions.map((q) => ({ id: q.id, topicId: q.topicId, difficulty: q.difficulty, p: easiness(q) }));
@@ -34,7 +49,7 @@ export async function buildPaper(tx: Tx, exam: { id: string; ownerId: string; st
       difficulty,
       items: ordered.map((p) => {
         const q = byId.get(p.q.id)!;
-        const v = q.versions.find((x) => x.version === q.currentVersion)!;
+        const v = q.versions.find((x) => x.version === (pinned.get(q.id) ?? q.currentVersion))!;
         return { q, v, marks: p.marks, negativeMarks: Math.min(v.negativeMarks, p.marks) };
       }),
     };
@@ -67,7 +82,7 @@ export async function startAttempt(opts: { examId: string; userId: string; sandb
     if (phase === 'PUBLISHED') throw forbidden(`This examination opens at ${exam.windowStart.toISOString()}`);
     if (phase === 'COMPLETED') throw forbidden('The availability window for this examination has closed');
     if (exam.pausedAt) throw conflict('The examination is paused by the examiner. Please wait.', 'EXAM_PAUSED');
-    if (settings.lateJoinMin > 0 && now.getTime() > exam.windowStart.getTime() + settings.lateJoinMin * 60000) throw forbidden(`Late entry closed ${settings.lateJoinMin} minutes after the exam started`);
+    if (settings.lateJoinMin > 0 && now.getTime() > exam.windowStart.getTime() + settings.lateJoinMin * 60000 + exam.pausedSec * 1000) throw forbidden(`Late entry closed ${settings.lateJoinMin} minutes after the exam started`);
     if (exam.accessCode && exam.accessCode !== (opts.accessCode ?? '').trim()) throw forbidden('Incorrect access code');
   } else {
     // a fresh sandbox each time; never touches real data
@@ -199,9 +214,13 @@ export async function finalizeAttempt(attemptId: string, status: 'SUBMITTED' | '
 
 /** Background sweeper: finalises attempts whose server deadline (+ network grace) passed, even if the tab is closed. */
 export function startExpirySweeper() {
+  let running = false;
   const tick = async () => {
+    if (running) return; // a slow mass-expiry must not overlap with the next tick
+    running = true;
     try {
-      const expired = await prisma.attempt.findMany({ where: { status: 'IN_PROGRESS', exam: { pausedAt: null } }, include: { exam: { select: { settings: true } } } });
+      // only rows already past their deadline (grace is checked per exam below; max allowed grace is 120 s)
+      const expired = await prisma.attempt.findMany({ where: { status: 'IN_PROGRESS', deadline: { lt: new Date() }, exam: { pausedAt: null } }, include: { exam: { select: { settings: true } } } });
       const now = Date.now();
       for (const a of expired) {
         const grace = readSettings(a.exam.settings).gracePeriodSec * 1000;
@@ -225,15 +244,23 @@ export function startExpirySweeper() {
       }
     } catch (e) {
       console.error('sweeper', e);
+    } finally {
+      running = false;
     }
   };
   return setInterval(tick, 5000);
+}
+
+/** Atomic deadline extension (no read-then-write race between concurrent requests). */
+export async function extendDeadline(attemptId: string, seconds: number) {
+  await prisma.$executeRaw`UPDATE "Attempt" SET "deadline" = "deadline" + make_interval(secs => ${seconds}), "extraTimeSec" = "extraTimeSec" + ${seconds} WHERE "id" = ${attemptId}`;
+  return prisma.attempt.findUniqueOrThrow({ where: { id: attemptId } });
 }
 
 export async function recomputeExamTotals(examId: string) {
   const exam = await prisma.exam.findUniqueOrThrow({ where: { id: examId }, include: { questions: { include: { question: { include: { versions: true } } } } } });
   let total = 0;
   if (exam.mode === 'BLUEPRINT') total = ((exam.blueprint as Slot[] | null) ?? []).reduce((s, x) => s + x.count * x.marks, 0);
-  else total = exam.questions.reduce((s, eq) => s + (eq.question.versions.find((v) => v.version === eq.question.currentVersion)?.marks ?? 0), 0);
+  else total = exam.questions.reduce((s, eq) => s + (eq.question.versions.find((v) => v.version === (eq.version ?? eq.question.currentVersion))?.marks ?? 0), 0);
   return prisma.exam.update({ where: { id: examId }, data: { totalMarks: Math.round(total * 100) / 100 } });
 }

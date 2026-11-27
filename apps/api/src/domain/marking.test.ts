@@ -54,6 +54,10 @@ describe('exam timing', () => {
     expect(computeDeadline(new Date('2026-01-01T11:30:00Z'), 60, 0, we).toISOString()).toBe('2026-01-01T12:00:00.000Z');
     expect(computeDeadline(new Date('2026-01-01T10:00:00Z'), 60, 0, we).toISOString()).toBe('2026-01-01T11:00:00.000Z');
     expect(computeDeadline(new Date('2026-01-01T10:00:00Z'), 60, 50, we).toISOString()).toBe('2026-01-01T11:30:00.000Z');
+    // late starter with +50%: 10 min of window left → 15 min, not 40
+    expect(computeDeadline(new Date('2026-01-01T11:50:00Z'), 60, 50, we).toISOString()).toBe('2026-01-01T12:05:00.000Z');
+    // compensation is added on top
+    expect(computeDeadline(new Date('2026-01-01T10:00:00Z'), 60, 0, we, 120).toISOString()).toBe('2026-01-01T11:02:00.000Z');
   });
 });
 
