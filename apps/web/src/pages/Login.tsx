@@ -57,16 +57,16 @@ export default function Login() {
       <div aria-hidden className="grid-paper absolute inset-0 lg:hidden" />
       {/* React Bits CursorGrid: the graph paper lights up in highlighter yellow under the cursor */}
       <CursorGrid className="!absolute inset-0 hidden lg:block" cellSize={28} color="#F7E64A" gridColor={mode === 'contrast' ? '#333333' : dark ? '#25395A' : '#D6E8F5'} gridOpacity={1} radius={85} maxOpacity={0.8} fillOpacity={0.5} falloff="smooth" holdTime={250} fadeDuration={700} clickPulse lightMode={!dark} />
-      <div aria-hidden className="pointer-events-none absolute inset-y-0 left-6 hidden w-[1.5px] bg-margin/60 lg:left-16 lg:block" />
-      <div className="pointer-events-none relative mx-auto flex min-h-dvh max-w-[1240px] flex-col px-5 py-8 sm:px-8 lg:py-10 lg:pl-24 lg:pr-12">
+      <div aria-hidden className="pointer-events-none absolute inset-y-0 left-3 hidden w-[1.5px] bg-margin/50 sm:left-6 lg:block" />
+      <div className="pointer-events-none relative mx-auto flex min-h-dvh max-w-[1440px] flex-col px-5 py-8 sm:px-8 lg:py-10 lg:pl-12 lg:pr-10">
         <header className="pointer-events-auto w-fit">
           <Logo to="/" />
         </header>
         <div className="flex flex-1 items-center py-8">
-          <div className="grid w-full items-center gap-12 lg:grid-cols-[minmax(0,1fr)_420px] lg:gap-20">
+          <div className="grid w-full items-center gap-12 lg:grid-cols-[minmax(0,1fr)_460px] lg:gap-16 xl:gap-24">
             <div className="hidden lg:block">
-              <p className="mb-4 font-mono text-[12px] font-semibold uppercase tracking-[0.16em] text-ink-2">Online exams, done properly</p>
-              <h1 className="display text-[52px] font-bold leading-[1.02] text-ink">
+              <p className="mb-5 font-mono text-[13px] font-semibold uppercase tracking-[0.16em] text-ink-2">Online exams, done properly</p>
+              <h1 className="display text-[56px] font-bold leading-[1.02] text-ink xl:text-[72px] 2xl:text-[80px]">
                 Exams that stay
                 <br />
                 <RotatingText
@@ -79,24 +79,24 @@ export default function Login() {
                   transition={{ type: 'spring', damping: 30, stiffness: 400 }}
                 />
               </h1>
-              <p className="mt-5 max-w-md text-[17px] text-ink-2">Create, conduct, monitor and grade online exams, using integrity signals examiners can review instead of webcams.</p>
-              <ul className="stagger mt-8 max-w-lg space-y-3.5 text-[15px] text-ink">
+              <p className="mt-6 max-w-xl text-[20px] leading-relaxed text-ink-2">Create, conduct, monitor and grade online exams, using integrity signals examiners can review instead of webcams.</p>
+              <ul className="stagger mt-10 max-w-xl space-y-4 text-[17px] text-ink">
                 {[
-                  [<CloudOff key="a" className="size-[18px]" />, 'Answers keep saving offline and sync later, without giving anyone extra time.'],
-                  [<Scale key="b" className="size-[18px]" />, 'Randomised papers balanced to equal difficulty, with a fairness report to prove it.'],
-                  [<BadgeCheck key="c" className="size-[18px]" />, 'Digitally signed result reports anyone can verify with a QR code.'],
+                  [<CloudOff key="a" className="size-5" />, 'Answers keep saving offline and sync later, without giving anyone extra time.'],
+                  [<Scale key="b" className="size-5" />, 'Randomised papers balanced to equal difficulty, with a fairness report to prove it.'],
+                  [<BadgeCheck key="c" className="size-5" />, 'Digitally signed result reports anyone can verify with a QR code.'],
                 ].map(([icon, text], i) => (
                   <li key={i} className="flex items-start gap-3">
-                    <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-md bg-accent text-accent-ink">{icon}</span>
-                    <span className="pt-1">{text}</span>
+                    <span className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-lg bg-accent text-accent-ink">{icon}</span>
+                    <span className="pt-1.5">{text}</span>
                   </li>
                 ))}
               </ul>
             </div>
 
-        <div className="page-enter pointer-events-auto mx-auto w-full max-w-[420px] rounded-2xl border border-line bg-surface p-7 shadow-[var(--shadow-lift)] sm:p-8">
-          <h2 className="display text-[32px] font-bold"><span className="hl-swipe">Sign in</span></h2>
-          <p className="mt-1 text-[15px] text-ink-2">Use the account issued by your institution.</p>
+        <div className="page-enter pointer-events-auto mx-auto w-full max-w-[460px] rounded-2xl border border-line bg-surface p-7 shadow-[var(--shadow-lift)] sm:p-9">
+          <h2 className="display text-[36px] font-bold"><span className="hl-swipe">Sign in</span></h2>
+          <p className="mt-1.5 text-[16px] text-ink-2">Use the account issued by your institution.</p>
           <form onSubmit={submit} className="mt-8 space-y-4" noValidate>
             <Field label="Email" error={errors.email} required>
               {(id) => <Input id={id} type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} invalid={!!errors.email} placeholder="you@university.edu" />}
@@ -145,7 +145,7 @@ export default function Login() {
         </div>
           </div>
         </div>
-        <p className="hidden font-mono text-[12px] text-muted lg:block">Technoverse 5.0 · Web-e-Thon · move your cursor over the page ✎</p>
+        <p className="hidden font-mono text-[13px] text-muted lg:block">Technoverse 5.0 · Web-e-Thon · move your cursor over the page ✎</p>
       </div>
     </div>
   );
