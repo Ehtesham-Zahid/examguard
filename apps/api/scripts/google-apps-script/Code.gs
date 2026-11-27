@@ -4,17 +4,21 @@
  * Why: some hosts (Render's free plan) block outbound SMTP. This script runs on Google's servers and is
  * called over HTTPS, so email works anywhere. Setup steps: see SETUP.md next to this file.
  *
- * 1. Put a long random secret below (the same value goes into ExamGuard's EMAIL_RELAY_SECRET).
- * 2. Deploy → New deployment → Web app → Execute as: Me, Who has access: Anyone → copy the /exec URL
+ * 1. Deploy → New deployment → Web app → Execute as: Me, Who has access: Anyone → copy the /exec URL
  *    into ExamGuard's EMAIL_RELAY_URL.
+ * 2. Project Settings (gear) → Script properties → add RELAY_SECRET = a long random secret; put the same
+ *    value into ExamGuard's EMAIL_RELAY_SECRET. (Kept out of the code, so no redeploy is needed to change it.)
  */
-const SECRET = 'PASTE-THE-SAME-LONG-RANDOM-SECRET-HERE';
 const SENDER_NAME = 'ExamGuard'; // the name recipients see
+function getSecret_() {
+  return PropertiesService.getScriptProperties().getProperty('RELAY_SECRET') || '';
+}
 
 function doPost(e) {
   try {
     const req = JSON.parse((e && e.postData && e.postData.contents) || '{}');
-    if (!SECRET || SECRET.indexOf('PASTE-') === 0) return reply({ ok: false, error: 'Relay secret is not set in the Apps Script (edit SECRET in Code.gs and redeploy)' });
+    const SECRET = getSecret_();
+    if (SECRET.length < 16) return reply({ ok: false, error: 'Relay secret is not set: add the script property RELAY_SECRET (16+ characters) in Apps Script → Project Settings' });
     if (req.secret !== SECRET) return reply({ ok: false, error: 'Unauthorized: EMAIL_RELAY_SECRET does not match the secret in the Apps Script' });
 
     if (req.action === 'ping') {
@@ -52,6 +56,7 @@ function doGet() {
 function testSetup() {
   Logger.log('Sending as: ' + Session.getEffectiveUser().getEmail());
   Logger.log('Emails left today: ' + MailApp.getRemainingDailyQuota());
+  Logger.log('RELAY_SECRET set: ' + (getSecret_().length >= 16 ? 'yes' : 'no — add it in Project Settings → Script properties'));
 }
 
 function reply(obj) {
