@@ -4,7 +4,7 @@ import Papa from 'papaparse';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../core/prisma.js';
 import { authenticate, currentUser, requireRole } from '../core/auth.js';
-import { badRequest } from '../core/errors.js';
+import { badRequest, conflict } from '../core/errors.js';
 import { param, parseBody, parseQuery } from '../core/validate.js';
 import { loadQuestionForStaff } from '../core/policy.js';
 import { audit } from '../core/audit.js';
@@ -140,6 +140,10 @@ questionsRouter.put('/:id', async (req, res) => {
   const existing = await loadQuestionForStaff(me, param(req, 'id'));
   const body = parseBody(questionInput, req);
   if (body.type !== existing.type) throw badRequest('Question type cannot be changed after creation; create a new question instead');
+  const newTopic = body.topicId ?? (body.topicName ? (await prisma.topic.findUnique({ where: { name: body.topicName.trim() } }))?.id : undefined);
+  if (newTopic !== existing.topicId || body.difficulty !== existing.difficulty) {
+    if (await usedByActiveBlueprint(existing)) throw conflict('This question feeds a published randomised exam — its topic and difficulty are locked until that exam completes. You can still edit the wording.');
+  }
   const q = await prisma.$transaction(async (tx) => {
     const topicId = await resolveTopic(tx, body);
     const next = existing.currentVersion + 1;
@@ -149,6 +153,11 @@ questionsRouter.put('/:id', async (req, res) => {
   audit(me.id, 'question.update', 'Question', q.id, { version: q.currentVersion });
   res.json(shape(q));
 });
+
+async function usedByActiveBlueprint(q: { ownerId: string; topicId: string; difficulty: string }) {
+  const exams = await prisma.exam.findMany({ where: { ownerId: q.ownerId, mode: 'BLUEPRINT', status: 'PUBLISHED', windowEnd: { gt: new Date() } }, select: { blueprint: true } });
+  return exams.some((e) => ((e.blueprint as { topicId: string; difficulty: string }[] | null) ?? []).some((s) => s.topicId === q.topicId && s.difficulty === q.difficulty));
+}
 
 questionsRouter.post('/:id/archive', async (req, res) => {
   const me = currentUser(req);

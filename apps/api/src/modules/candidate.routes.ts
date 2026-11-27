@@ -180,6 +180,8 @@ async function registerContact(attempt: { id: string; examId: string; lastHeartb
  */
 async function suggestCompensation(attempt: { id: string; examId: string; isSandbox: boolean; exam: { settings: unknown } }, gap: { from: Date; to: Date; gapSec: number; remainingAtGapStartSec: number }, offlineAnswers: number) {
   if (attempt.isSandbox || gap.gapSec < 60 || offlineAnswers > 0) return null;
+  const live = await prisma.attempt.findUnique({ where: { id: attempt.id }, select: { status: true } });
+  if (live?.status !== 'IN_PROGRESS') return null; // finalised attempts get their suggestion from the expiry sweeper
   const seconds = Math.min(gap.gapSec, gap.remainingAtGapStartSec, 30 * 60);
   if (seconds <= 0) return null;
   const s = readSettings(attempt.exam.settings);
@@ -220,7 +222,7 @@ candidateRouter.put('/attempts/:id/answers', async (req, res) => {
   const s = readSettings(attempt.exam.settings);
   const deadline = attempt.deadline.getTime();
   const inTime = attempt.status === 'IN_PROGRESS' && now <= deadline + s.gracePeriodSec * 1000;
-  const inMergeWindow = (attempt.status === 'IN_PROGRESS' || attempt.status === 'AUTO_SUBMITTED') && now <= deadline + OFFLINE_MERGE_WINDOW_MS;
+  const inMergeWindow = (attempt.status === 'IN_PROGRESS' || attempt.status === 'AUTO_SUBMITTED') && now <= deadline + OFFLINE_MERGE_WINDOW_MS && !attempt.exam.resultsPublishedAt;
 
   if (attempt.status === 'IN_PROGRESS') assertSession(attempt, req);
   if (attempt.exam.pausedAt && attempt.status === 'IN_PROGRESS') throw conflict('Exam is paused — your answers are kept on this device and will sync when it resumes', 'EXAM_PAUSED');

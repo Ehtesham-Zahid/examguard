@@ -10,6 +10,7 @@ export interface AuthUser {
   role: Role;
   name: string;
   email: string;
+  mustChangePassword?: boolean;
 }
 
 declare global {
@@ -25,6 +26,7 @@ interface AccessPayload {
   sub: string;
   role: Role;
   tv: number;
+  typ?: string;
 }
 
 export function signAccessToken(u: { id: string; role: Role; tokenVersion: number }) {
@@ -50,9 +52,10 @@ export async function resolveUserFromToken(token: string): Promise<AuthUser> {
   } catch {
     throw unauthorized('Session expired, please sign in again');
   }
+  if (payload.typ === 'refresh') throw unauthorized('Invalid access token');
   const user = await prisma.user.findUnique({ where: { id: payload.sub } });
   if (!user || user.status !== 'ACTIVE' || user.tokenVersion !== payload.tv) throw unauthorized('Session is no longer valid');
-  return { id: user.id, role: user.role, name: user.name, email: user.email };
+  return { id: user.id, role: user.role, name: user.name, email: user.email, mustChangePassword: user.mustChangePassword };
 }
 
 /** Layer 1: authentication — who are you */
@@ -60,6 +63,8 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
   const header = req.headers.authorization;
   if (!header?.startsWith('Bearer ')) throw unauthorized();
   req.user = await resolveUserFromToken(header.slice(7));
+  // accounts with a temporary password may only change it (and read who they are) until they do
+  if (req.user.mustChangePassword && !req.originalUrl.startsWith('/api/auth/')) throw forbidden('Please set a new password before continuing');
   next();
 }
 

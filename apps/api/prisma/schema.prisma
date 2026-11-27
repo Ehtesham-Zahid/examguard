@@ -200,6 +200,7 @@ model ExamQuestion {
   questionId String
   question   Question @relation(fields: [questionId], references: [id])
   position   Int
+  version    Int? // pinned at publish so later bank edits never change a published exam
 
   @@unique([examId, questionId])
 }

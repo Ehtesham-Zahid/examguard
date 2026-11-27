@@ -12,14 +12,14 @@ import { audit } from '../core/audit.js';
 type Tx = Prisma.TransactionClient;
 
 /** Build the frozen question list for a new attempt (fixed list or fair blueprint). */
-export async function buildPaper(tx: Tx, exam: { id: string; ownerId: string; mode: string; blueprint: unknown; settings: unknown }, seed: string) {
+export async function buildPaper(tx: Tx, exam: { id: string; ownerId: string; status: string; mode: string; blueprint: unknown; settings: unknown }, seed: string) {
   const settings = readSettings(exam.settings);
   const rand = rng(seed);
 
   if (exam.mode === 'BLUEPRINT') {
     const slots = (exam.blueprint as Slot[] | null) ?? [];
     const questions = await tx.question.findMany({
-      where: { archived: false, ownerId: exam.ownerId, OR: slots.map((s) => ({ topicId: s.topicId, difficulty: s.difficulty as 'EASY' })) },
+      where: { ...(exam.status === 'DRAFT' ? { archived: false } : {}), ownerId: exam.ownerId, OR: slots.map((s) => ({ topicId: s.topicId, difficulty: s.difficulty as 'EASY' })) },
       include: { versions: true },
     });
     const pool: PoolQuestion[] = questions.map((q) => ({ id: q.id, topicId: q.topicId, difficulty: q.difficulty, p: easiness(q) }));
@@ -42,7 +42,7 @@ export async function buildPaper(tx: Tx, exam: { id: string; ownerId: string; mo
 
   const eqs = await tx.examQuestion.findMany({ where: { examId: exam.id }, orderBy: { position: 'asc' }, include: { question: { include: { versions: true } } } });
   const items = eqs.map((eq) => {
-    const v = eq.question.versions.find((x) => x.version === eq.question.currentVersion)!;
+    const v = eq.question.versions.find((x) => x.version === (eq.version ?? eq.question.currentVersion))!;
     return { q: eq.question, v, marks: v.marks, negativeMarks: v.negativeMarks };
   });
   const ordered = settings.shuffleQuestions ? shuffle(items, rand) : items;
@@ -158,16 +158,22 @@ export async function gradeAttempt(tx: Tx, attemptId: string) {
   for (const aq of aqs) {
     const type = aq.questionVersion.question.type as QType;
     let auto: number | null;
+    const base = { type, marks: aq.marks, negativeMarks: aq.negativeMarks, multiScheme: aq.multiScheme as Scheme, response: aq.answer?.response ?? null };
     if (aq.voided) auto = aq.marks; // voided question: everybody gets full marks
-    else
-      auto = autoMark({ type, marks: aq.marks, negativeMarks: aq.negativeMarks, multiScheme: aq.multiScheme as Scheme, correct: correctFor(aq), response: aq.answer?.response ?? null });
+    else {
+      auto = autoMark({ ...base, correct: aq.questionVersion.correct as string[] });
+      // an accepted alternative answer (dispute remedy) can only ever raise a score, never lower it
+      if (aq.correctOverride && auto !== null) auto = Math.max(auto, autoMark({ ...base, correct: aq.correctOverride as string[] }) ?? auto);
+    }
     if (type === 'WRITTEN' && !aq.voided) {
       const text = (aq.answer?.response as { text?: string } | null)?.text?.trim();
       if (!text) auto = 0; // blank written answer needs no grader
     }
-    if (aq.answer) await tx.answer.update({ where: { id: aq.answer.id }, data: { autoScore: auto } });
-    else await tx.answer.create({ data: { attemptId, attemptQuestionId: aq.id, response: undefined, autoScore: auto } });
-    const manual = aq.answer?.manualScore ?? null;
+    // voiding overrides any manual grade too, so every surface (results, PDF, analytics) shows full marks
+    const voidPatch = aq.voided ? { manualScore: aq.marks } : {};
+    if (aq.answer) await tx.answer.update({ where: { id: aq.answer.id }, data: { autoScore: auto, ...voidPatch } });
+    else await tx.answer.create({ data: { attemptId, attemptQuestionId: aq.id, response: undefined, autoScore: auto, ...voidPatch } });
+    const manual = aq.voided ? aq.marks : (aq.answer?.manualScore ?? null);
     if (auto === null && manual === null) pendingManual++;
     score += manual ?? auto ?? 0;
   }

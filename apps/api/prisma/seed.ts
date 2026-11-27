@@ -175,6 +175,9 @@ async function main() {
     },
   });
 
+  // published exams pin their question versions (as POST /exams/:id/publish does)
+  await prisma.examQuestion.updateMany({ where: { exam: { status: { not: 'DRAFT' } } }, data: { version: 1 } });
+
   for (const e of [live, fairExam, done, grading, upcoming]) {
     await prisma.enrollment.createMany({ data: candidates.map((c, i) => ({ examId: e.id, candidateId: c.id, extraTimePct: i === 3 ? 25 : 0 })) });
   }

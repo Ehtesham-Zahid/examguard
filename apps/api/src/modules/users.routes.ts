@@ -9,6 +9,7 @@ import { badRequest } from '../core/errors.js';
 import { param, parseBody, parseQuery } from '../core/validate.js';
 import { audit, verifyAuditChain } from '../core/audit.js';
 import { passwordSchema } from './auth.routes.js';
+import { loadExamForStaff } from '../core/policy.js';
 
 export const usersRouter = Router();
 usersRouter.use(authenticate);
@@ -114,6 +115,10 @@ usersRouter.post('/import', requireRole('ADMIN', 'EXAMINER'), async (req, res) =
     }
   }
   if (rows.length === 0) throw badRequest('File contains no rows');
+  if (body.enrollExamId) {
+    const exam = await loadExamForStaff(currentUser(req), body.enrollExamId);
+    if (exam.status === 'COMPLETED' || exam.status === 'ARCHIVED' || exam.windowEnd < new Date()) throw badRequest('Cannot enrol candidates in a completed examination');
+  }
   if (rows.length > 2000) throw badRequest('Maximum 2000 rows per import');
 
   const seen = new Set<string>();

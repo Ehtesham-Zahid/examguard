@@ -5,7 +5,7 @@ import { authenticate, currentUser, requireRole } from '../core/auth.js';
 import { badRequest, conflict, forbidden, notFound } from '../core/errors.js';
 import { param, parseBody, parseQuery } from '../core/validate.js';
 import { loadAttemptForStaff, loadExamForStaff } from '../core/policy.js';
-import { readSettings } from '../domain/examPhase.js';
+import { examPhase, readSettings } from '../domain/examPhase.js';
 import { finalAnswerScore, selectedIds, validateManualScore } from '../domain/marking.js';
 import { PRIOR } from '../domain/fairness.js';
 import { jaccard, shingles } from '../domain/similarity.js';
@@ -150,10 +150,11 @@ staffRouter.post('/compensations/:id/decide', async (req, res) => {
   const comp = await prisma.timeCompensation.findUnique({ where: { id: param(req, 'id') } });
   if (!comp) throw notFound();
   const attempt = await loadAttemptForStaff(me, comp.attemptId);
-  if (comp.status !== 'PENDING') throw conflict('Already decided');
   const { approve, seconds } = parseBody(z.object({ approve: z.boolean(), seconds: z.number().int().min(1).max(3600).optional() }), req);
   const grant = seconds ?? comp.seconds;
-  await prisma.timeCompensation.update({ where: { id: comp.id }, data: { status: approve ? 'APPROVED' : 'REJECTED', decidedById: me.id, decidedAt: new Date(), seconds: grant } });
+  const claimed = await prisma.timeCompensation.updateMany({ where: { id: comp.id, status: 'PENDING' }, data: { status: approve ? 'APPROVED' : 'REJECTED', decidedById: me.id, decidedAt: new Date(), seconds: grant } });
+  if (claimed.count !== 1) throw conflict('Already decided');
+  if (approve) await prisma.timeCompensation.updateMany({ where: { attemptId: attempt.id, status: 'PENDING' }, data: { status: 'REJECTED', decidedById: me.id, decidedAt: new Date() } }); // duplicates for the same outage
   let reopened = false;
   if (approve) {
     if (attempt.status === 'IN_PROGRESS') {
@@ -272,6 +273,7 @@ staffRouter.post('/exams/:id/results/publish', async (req, res) => {
   const me = currentUser(req);
   const exam = await loadExamForStaff(me, param(req, 'id'));
   if (exam.resultsPublishedAt) throw conflict('Results are already published');
+  if (examPhase(exam) !== 'COMPLETED' && examPhase(exam) !== 'ARCHIVED') throw conflict('Results can be published once the exam window has closed — close the exam early if everyone has finished');
   const attempts = await prisma.attempt.findMany({ where: { examId: exam.id, isSandbox: false } });
   if (attempts.some((a) => a.status === 'IN_PROGRESS')) throw conflict('Some candidates are still writing — wait for them to finish or close the exam');
   const pending = attempts.filter((a) => a.gradingStatus !== 'GRADED').length;
@@ -535,7 +537,7 @@ staffRouter.post('/disputes/:id/resolve', async (req, res) => {
       if (err) throw badRequest(err);
       await prisma.answer.upsert({ where: { attemptQuestionId: aq.id }, update: { manualScore: body.score, gradedById: me.id, gradedAt: new Date(), feedback: `Adjusted via dispute: ${body.resolution}` }, create: { attemptId: d.attemptId, attemptQuestionId: aq.id, manualScore: body.score } });
     } else if (body.action === 'ACCEPT_ANSWER' || body.action === 'VOID_QUESTION') {
-      const siblings = await prisma.attemptQuestion.findMany({ where: { questionVersionId: aq.questionVersionId, attempt: { examId: d.attempt.examId } }, include: { questionVersion: true } });
+      const siblings = await prisma.attemptQuestion.findMany({ where: { questionVersionId: aq.questionVersionId, attempt: { examId: d.attempt.examId, isSandbox: false, status: { not: 'IN_PROGRESS' } } }, include: { questionVersion: true } });
       if (body.action === 'ACCEPT_ANSWER') {
         if (!body.optionIds?.length) throw badRequest('Select the option(s) to accept as correct');
         const valid = (siblings[0].questionVersion.options as { id: string }[]).map((o) => o.id);

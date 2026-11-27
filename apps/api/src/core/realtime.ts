@@ -21,6 +21,10 @@ export function initRealtime(server: HttpServer) {
   io.on('connection', (socket) => {
     const user = socket.data.user;
     socket.join(`user:${user.id}`);
+    socket.on('leave:exam', (examId: string) => {
+      socket.leave(`monitor:${examId}`);
+      socket.leave(`exam:${examId}`);
+    });
     socket.on('join:exam', async (examId: string, ack?: (ok: boolean) => void) => {
       // Staff join the monitor room; candidates join the candidate room only if enrolled
       const exam = await prisma.exam.findUnique({ where: { id: examId } });

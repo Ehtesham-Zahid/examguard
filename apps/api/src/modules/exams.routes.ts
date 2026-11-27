@@ -236,7 +236,11 @@ examsRouter.post('/:id/publish', async (req, res) => {
   await recomputeExamTotals(exam.id);
   const review = await reviewChecklist(exam.id);
   if (!review.canPublish) throw badRequest('Fix the blocking issues before publishing', review.checks.filter((c) => !c.ok && c.blocking));
-  const updated = await prisma.exam.update({ where: { id: exam.id }, data: { status: 'PUBLISHED', publishedAt: new Date() } });
+  const pinned = await prisma.examQuestion.findMany({ where: { examId: exam.id }, include: { question: { select: { currentVersion: true } } } });
+  const [updated] = await prisma.$transaction([
+    prisma.exam.update({ where: { id: exam.id }, data: { status: 'PUBLISHED', publishedAt: new Date() } }),
+    ...pinned.map((eq) => prisma.examQuestion.update({ where: { id: eq.id }, data: { version: eq.question.currentVersion } })),
+  ]);
   const enrolled = await prisma.enrollment.findMany({ where: { examId: exam.id }, select: { candidateId: true } });
   await notify(enrolled.map((e) => e.candidateId), 'New examination scheduled', `${exam.title} opens ${exam.windowStart.toUTCString()}`, `/candidate/exams/${exam.id}`);
   audit(me.id, 'exam.publish', 'Exam', exam.id);
@@ -249,7 +253,10 @@ examsRouter.post('/:id/unpublish', async (req, res) => {
   if (exam.status !== 'PUBLISHED') throw conflict('Exam is not published');
   const attempts = await prisma.attempt.count({ where: { examId: exam.id, isSandbox: false } });
   if (attempts) throw conflict('Candidates have already started — the exam cannot return to draft');
-  const updated = await prisma.exam.update({ where: { id: exam.id }, data: { status: 'DRAFT', publishedAt: null } });
+  const [updated] = await prisma.$transaction([
+    prisma.exam.update({ where: { id: exam.id }, data: { status: 'DRAFT', publishedAt: null } }),
+    prisma.examQuestion.updateMany({ where: { examId: exam.id }, data: { version: null } }),
+  ]);
   audit(me.id, 'exam.unpublish', 'Exam', exam.id);
   res.json(updated);
 });
@@ -258,6 +265,7 @@ examsRouter.post('/:id/close', async (req, res) => {
   const me = currentUser(req);
   const exam = await loadExamForStaff(me, param(req, 'id'));
   if (exam.status !== 'PUBLISHED') throw conflict('Only published examinations can be closed');
+  if (examPhase(exam) === 'PUBLISHED') throw conflict('This exam has not opened yet — unpublish it instead of closing it');
   const active = await prisma.attempt.findMany({ where: { examId: exam.id, status: 'IN_PROGRESS', isSandbox: false } });
   for (const a of active) await finalizeAttempt(a.id, 'FORCE_SUBMITTED', 'exam_closed_by_examiner');
   const updated = await prisma.exam.update({ where: { id: exam.id }, data: { status: 'COMPLETED', windowEnd: new Date(Math.min(Date.now(), exam.windowEnd.getTime())), pausedAt: null } });
@@ -394,6 +402,7 @@ examsRouter.post('/:id/announcements', async (req, res) => {
   const me = currentUser(req);
   const exam = await loadExamForStaff(me, param(req, 'id'));
   const body = parseBody(z.object({ message: z.string().trim().min(1, 'Message cannot be empty').max(1000), candidateId: z.string().optional().nullable() }), req);
+  if (body.candidateId && !(await prisma.enrollment.findUnique({ where: { examId_candidateId: { examId: exam.id, candidateId: body.candidateId } } }))) throw badRequest('That candidate is not enrolled in this exam');
   const a = await prisma.announcement.create({ data: { examId: exam.id, authorId: me.id, message: body.message, candidateId: body.candidateId || null } });
   if (a.candidateId) {
     const { emitToUser } = await import('../core/realtime.js');

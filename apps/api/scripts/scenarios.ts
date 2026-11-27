@@ -237,6 +237,11 @@ async function main() {
     ok(upd.status === 200 && upd.json.currentVersion === full.currentVersion + 1, 'edit creates a new version');
     const after = (await call('GET', `/candidate/attempts/${a}`, s, undefined, dev('V'))).json.questions.find((q: any) => q.id === before.id);
     ok(after.body === before.body, 'active attempt still shows the original version');
+    const s2 = await login('student6@examguard.test');
+    const a2 = (await call('POST', `/candidate/exams/${id}/start`, s2, {}, dev('V2'))).json.attemptId;
+    const fresh = (await call('GET', `/candidate/attempts/${a2}`, s2, undefined, dev('V2'))).json.questions[0];
+    ok(fresh.body === before.body, 'candidates starting after the edit still get the version pinned at publish');
+    ok((await call('POST', `/staff/exams/${id}/results/publish`, examiner)).status === 409, 'results cannot be published while the exam window is open');
   }
 
   // ---------- 12. disputes: void, adjust, reject rules; unpublish revokes certificates
@@ -263,6 +268,37 @@ async function main() {
     ok(pub.status === 200 && (await call('GET', `/verify/${code}`)).json.valid, 'republishing restores a valid certificate with the same code');
   }
 
+  // ---------- 12b. void overrides manual grades; accepting an answer never lowers a score; sandbox untouched
+  {
+    const exams = (await call('GET', '/exams', examiner)).json as any[];
+    const db = exams.find((e) => e.title.includes('Database'));
+    // a sandbox attempt that must stay out of remedies
+    const sb = (await call('POST', `/candidate/exams/${db.id}/start`, examiner, { sandbox: true }, dev('sbx'))).json.attemptId;
+    const results = (await call('GET', `/staff/exams/${db.id}/results`, examiner)).json;
+    const written = await prisma.attemptQuestion.findFirst({ where: { attempt: { examId: db.id, isSandbox: false }, questionVersion: { question: { type: 'WRITTEN' } }, answer: { manualScore: { not: null } } }, include: { answer: true, attempt: { include: { candidate: true } } } });
+    const s = await login(written!.attempt.candidate.email);
+    const d = await call('POST', `/candidate/attempts/${written!.attemptId}/disputes`, s, { questionId: written!.id, category: 'AMBIGUOUS_QUESTION', message: 'The written question wording was unclear to everyone.' });
+    await call('POST', `/staff/disputes/${d.json.id}/resolve`, examiner, { decision: 'UPHELD', resolution: 'Voiding the written question for all.', action: 'VOID_QUESTION' });
+    const ans = await prisma.answer.findUniqueOrThrow({ where: { attemptQuestionId: written!.id } });
+    ok(ans.manualScore === written!.marks, `voiding a written question gives full marks even to already-graded answers (${written!.answer!.manualScore} → ${ans.manualScore})`);
+    const sbRow = await prisma.attemptQuestion.findFirst({ where: { attemptId: sb, voided: true } });
+    ok(!sbRow, 'sandbox attempts are not touched by dispute remedies');
+    // multi-select: a candidate with the original exact key keeps full marks after another option is accepted
+    const multi = await prisma.attemptQuestion.findMany({ where: { attempt: { examId: db.id, isSandbox: false }, voided: false, questionVersion: { question: { type: 'MULTI' } } }, include: { answer: true, questionVersion: true, attempt: { include: { candidate: true } } } });
+    const exact = multi.find((m) => JSON.stringify([...((m.answer?.response as string[]) ?? [])].sort()) === JSON.stringify([...(m.questionVersion.correct as string[])].sort()));
+    if (exact) {
+      const other = multi.find((m) => m.questionVersionId === exact.questionVersionId && m.id !== exact.id)!;
+      const before = (await prisma.answer.findUniqueOrThrow({ where: { attemptQuestionId: exact.id } })).autoScore;
+      const s3 = await login(other.attempt.candidate.email);
+      const extra = (other.questionVersion.options as { id: string }[]).map((o) => o.id).find((o) => !(other.questionVersion.correct as string[]).includes(o))!;
+      const d2 = await call('POST', `/candidate/attempts/${other.attemptId}/disputes`, s3, { questionId: other.id, category: 'GRADING_ERROR', message: 'Another option is also defensible for this question.' });
+      await call('POST', `/staff/disputes/${d2.json.id}/resolve`, examiner, { decision: 'UPHELD', resolution: 'Accepting the extra option as well.', action: 'ACCEPT_ANSWER', optionIds: [extra] });
+      const after = (await prisma.answer.findUniqueOrThrow({ where: { attemptQuestionId: exact.id } })).autoScore;
+      ok(after === before, `accepting an extra option does not lower the score of a candidate who matched the original key (${before} → ${after})`);
+    } else ok(true, '(no exact multi-select answer in seed to check accept-answer)');
+    void results;
+  }
+
   // ---------- 13. account security
   {
     const create = await call('POST', '/users', admin, { name: 'Temp User', email: 'temp.user@examguard.test', role: 'CANDIDATE' });
@@ -271,6 +307,7 @@ async function main() {
     ok(!!t, 'new user signs in with temporary password');
     const me = await call('GET', '/auth/me', t);
     ok(me.json.user.mustChangePassword === true, 'must change password on first login');
+    ok((await call('GET', '/candidate/exams', t)).status === 403, 'API refuses other requests until the temporary password is changed');
     await call('PATCH', `/users/${create.json.user.id}`, admin, { status: 'DISABLED' });
     ok((await call('GET', '/auth/me', t)).status === 401, 'disabling a user kills their existing session');
     ok((await call('POST', '/auth/login', undefined, { email: 'temp.user@examguard.test', password: pw })).status === 401, 'disabled user cannot sign in');
@@ -279,6 +316,9 @@ async function main() {
     for (let i = 0; i < 5; i++) await call('POST', '/auth/login', undefined, { email: 'student11@examguard.test', password: 'wrong' });
     const locked = await call('POST', '/auth/login', undefined, { email: 'student11@examguard.test', password: 'Student@123' });
     ok(locked.status === 401 && /locked/i.test(locked.json.error.message), 'account locks after 5 failed attempts');
+    const lr = await fetch(BASE + '/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'student1@examguard.test', password: 'Student@123' }) });
+    const rt = /eg_refresh=([^;]+)/.exec(lr.headers.get('set-cookie') ?? '')?.[1];
+    ok(rt && (await call('GET', '/auth/me', rt)).status === 401, 'refresh token cannot be used as an access token');
     const s = await login('student1@examguard.test');
     await call('POST', '/auth/logout-all', s);
     ok((await call('GET', '/auth/me', s)).status === 401, 'logout from all devices invalidates tokens');

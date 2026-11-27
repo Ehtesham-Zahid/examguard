@@ -33,9 +33,9 @@ export interface ClientEvent {
   details?: string;
 }
 
-export async function recordEvents(attempt: { id: string; examId: string; isSandbox: boolean; violationCount: number; integrityScore: number; exam: { settings: unknown } }, events: ClientEvent[]) {
-  let violations = attempt.violationCount;
-  let score = attempt.integrityScore;
+export async function recordEvents(attempt: { id: string; examId: string; isSandbox: boolean; exam: { settings: unknown } }, events: ClientEvent[]) {
+  let violations = 0;
+  let penalty = 0;
   const created: string[] = [];
   for (const e of events.slice(0, 50)) {
     const sig = SIGNALS[e.type];
@@ -45,10 +45,14 @@ export async function recordEvents(attempt: { id: string; examId: string; isSand
     await prisma.incident.create({ data: { attemptId: attempt.id, type: e.type, severity: sig.severity, details: [sig.label, e.details].filter(Boolean).join(' — ').slice(0, 400) } });
     created.push(e.type);
     if (sig.counts) violations++;
-    score = Math.max(0, score - PENALTY[sig.severity]);
+    penalty += PENALTY[sig.severity];
   }
   const settings = readSettings(attempt.exam.settings);
-  await prisma.attempt.update({ where: { id: attempt.id }, data: { violationCount: violations, integrityScore: score } });
+  // atomic increments: concurrent batches can't overwrite each other's counts
+  const updated = await prisma.attempt.update({ where: { id: attempt.id }, data: { violationCount: { increment: violations }, integrityScore: { decrement: penalty } } });
+  if (updated.integrityScore < 0) await prisma.attempt.update({ where: { id: attempt.id }, data: { integrityScore: 0 } });
+  violations = updated.violationCount;
+  const score = Math.max(0, updated.integrityScore);
   if (created.length && !attempt.isSandbox) emitToMonitors(attempt.examId, 'incident:new', { attemptId: attempt.id, types: created });
   const limitReached = settings.maxViolations > 0 && violations >= settings.maxViolations;
   return { violations, maxViolations: settings.maxViolations, integrityScore: score, limitReached, warnings: Math.max(0, settings.maxViolations - violations) };
