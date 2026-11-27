@@ -266,6 +266,8 @@ model AttemptQuestion {
   marks             Float
   negativeMarks     Float           @default(0)
   multiScheme       MultiScheme     @default(PARTIAL)
+  correctOverride   Json?
+  voided            Boolean         @default(false)
 
   answer   Answer?
   disputes Dispute[]
