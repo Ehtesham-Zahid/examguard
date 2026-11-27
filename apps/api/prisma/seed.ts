@@ -80,7 +80,7 @@ async function main() {
   ]);
 
   const hash = (p: string) => bcrypt.hash(p, 10);
-  const admin = await prisma.user.create({ data: { name: 'Ayesha Malik', email: 'admin@examguard.test', role: 'ADMIN', passwordHash: await hash('Admin@123') } });
+  const admin = await prisma.user.create({ data: { name: 'Sana Umer', email: 'admin@examguard.test', role: 'ADMIN', passwordHash: await hash('Admin@123') } });
   const examiner = await prisma.user.create({ data: { name: 'Dr. Hamza Qureshi', email: 'examiner@examguard.test', role: 'EXAMINER', passwordHash: await hash('Examiner@123') } });
   await prisma.user.create({ data: { name: 'Prof. Sana Iqbal', email: 'examiner2@examguard.test', role: 'EXAMINER', passwordHash: await hash('Examiner@123') } });
   const names = ['Ali Raza', 'Fatima Noor', 'Usman Tariq', 'Zainab Hussain', 'Bilal Ahmed', 'Hira Shah', 'Omar Farooq', 'Maryam Javed', 'Hassan Ali', 'Areeba Khan', 'Saad Mehmood', 'Laiba Aslam'];
