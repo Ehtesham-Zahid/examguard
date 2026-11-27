@@ -24,16 +24,21 @@ export default function Verify() {
   useEffect(() => {
     setInput(code ?? '');
     setRes(null); // never show a previous lookup's result next to a new one
-    if (!code) return;
-    setLoading(true);
     setError('');
+    if (!code) return;
+    let cancelled = false; // a slow earlier lookup must not land under a newer code
+    setLoading(true);
     api<Result>(`/verify/${encodeURIComponent(code)}`)
-      .then(setRes)
+      .then((r) => !cancelled && setRes(r))
       .catch((e) => {
+        if (cancelled) return;
         setRes(null);
         setError(errMsg(e));
       })
-      .finally(() => setLoading(false));
+      .finally(() => !cancelled && setLoading(false));
+    return () => {
+      cancelled = true;
+    };
   }, [code]);
   const submit = (e: FormEvent) => {
     e.preventDefault();

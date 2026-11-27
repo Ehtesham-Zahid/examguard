@@ -53,16 +53,29 @@ export async function suggestForAnswer(answerId: string, userId: string, force =
   const input = inputOf(a);
   if (!input.answer) throw new AiInputError('Blank answers are scored 0 automatically — there is nothing to mark');
   const hash = inputHash(input);
-  if (!force) {
-    const existing = await prisma.aiGradeSuggestion.findFirst({ where: { answerId, inputHash: hash, status: 'READY' }, orderBy: { createdAt: 'desc' } });
-    if (existing) return existing;
-  }
+  const existing = await prisma.aiGradeSuggestion.findFirst({ where: { answerId, inputHash: hash, status: 'READY' }, orderBy: { createdAt: 'desc' } });
+  // reuse identical input; even "Redo" reuses a suggestion made seconds ago (double clicks never pay twice)
+  if (existing && (!force || Date.now() - existing.createdAt.getTime() < 15_000)) return existing;
   return generate(a, input, hash, userId);
+}
+
+/* one global limit on concurrent Claude calls, across every exam and examiner */
+let active = 0;
+const waiters: (() => void)[] = [];
+async function slot<T>(fn: () => Promise<T>) {
+  if (active >= aiConfig.concurrency) await new Promise<void>((r) => waiters.push(r));
+  active++;
+  try {
+    return await fn();
+  } finally {
+    active--;
+    waiters.shift()?.();
+  }
 }
 
 async function generate(a: AnswerWithCtx, input: GradeInput, hash: string, userId: string) {
   try {
-    const r = await suggestGrade(input);
+    const r = await slot(() => suggestGrade(input));
     return await prisma.aiGradeSuggestion.create({
       data: {
         answerId: a.id,
@@ -106,7 +119,7 @@ const jobs = new Map<string, Job>();
 export function jobStatus(examId: string) {
   const j = jobs.get(examId);
   if (!j) return null;
-  return { questionId: j.questionId, total: j.total, done: j.done, failed: j.failed, running: !j.finishedAt, startedAt: j.startedAt, finishedAt: j.finishedAt, lastError: j.lastError };
+  return { questionId: j.questionId, total: j.total, done: j.done, failed: j.failed, running: !j.finishedAt, cancelled: j.cancelled, startedAt: j.startedAt, finishedAt: j.finishedAt, lastError: j.lastError };
 }
 
 export function cancelJob(examId: string) {
@@ -137,11 +150,20 @@ export async function startBatch(examId: string, questionId: string | null, user
   if (!aiEnabled()) throw new AiInputError('The AI marking assistant is not configured (set ANTHROPIC_API_KEY).');
   const running = jobs.get(examId);
   if (running && !running.finishedAt) return { started: false, reason: 'already_running', status: jobStatus(examId) };
-  const todo = (await batchCandidates(examId, questionId, opts)).slice(0, aiConfig.maxBatch);
-  const job: Job = { examId, questionId, total: todo.length, done: 0, failed: 0, startedAt: new Date(), finishedAt: todo.length ? null : new Date(), cancelled: false, lastError: null };
+  // reserve the slot before any await, so two quick clicks can't start two paid batches
+  const job: Job = { examId, questionId, total: 0, done: 0, failed: 0, startedAt: new Date(), finishedAt: null, cancelled: false, lastError: null };
   jobs.set(examId, job);
-  if (todo.length) void runJob(job, todo, userId);
-  return { started: todo.length > 0, queued: todo.length, status: jobStatus(examId) };
+  let todo: AnswerWithCtx[];
+  try {
+    todo = (await batchCandidates(examId, questionId, opts)).slice(0, aiConfig.maxBatch);
+  } catch (e) {
+    jobs.delete(examId);
+    throw e;
+  }
+  job.total = todo.length;
+  if (!todo.length) job.finishedAt = new Date();
+  else void runJob(job, todo, userId);
+  return { started: todo.length > 0, queued: todo.length, reason: todo.length ? undefined : 'nothing_to_do', status: jobStatus(examId) };
 }
 
 async function runJob(job: Job, todo: AnswerWithCtx[], userId: string) {
@@ -156,7 +178,7 @@ async function runJob(job: Job, todo: AnswerWithCtx[], userId: string) {
         job.failed++;
         job.lastError = row?.error ?? 'failed';
         // a bad key or exhausted rate limit will fail every request: stop early instead of burning through the list
-        if (row?.error && /rejected|cannot use|not configured/i.test(row.error)) job.cancelled = true;
+        if (row?.error && /rejected|cannot use|not configured|rate-limited/i.test(row.error)) job.cancelled = true;
       }
     }
   };
@@ -169,6 +191,9 @@ async function runJob(job: Job, todo: AnswerWithCtx[], userId: string) {
 export async function recordDecision(answerId: string, finalScore: number, userId: string) {
   const s = await prisma.aiGradeSuggestion.findFirst({ where: { answerId, status: 'READY' }, orderBy: { createdAt: 'desc' } });
   if (!s || s.score == null) return null;
+  // only pair with a suggestion made for exactly this question/rubric/answer
+  const a = await prisma.answer.findUnique({ where: { id: answerId }, include: answerInclude });
+  if (!a || inputHash(inputOf(a)) !== s.inputHash) return null;
   const decision = Math.abs(finalScore - s.score) < 1e-6 ? 'ACCEPTED' : 'ADJUSTED';
   await prisma.aiGradeSuggestion.update({ where: { id: s.id }, data: { decision, finalScore, decidedById: userId, decidedAt: new Date() } });
   return { suggestionId: s.id, aiScore: s.score, decision };
@@ -193,7 +218,8 @@ export async function consistencyReport(examId: string) {
     byQ.set(k, [...(byQ.get(k) ?? []), a]);
   }
   const similarPairs: { questionId: string; a: string; b: string; similarity: number; scoreA: number; scoreB: number; marks: number }[] = [];
-  for (const [questionId, list] of byQ) {
+  for (const [questionId, all] of byQ) {
+    const list = all.slice(0, 400); // pairwise check is O(n²): bound it so a huge exam can't stall the server
     const sh = list.map((a) => shingles(textOf(a)));
     for (let i = 0; i < list.length; i++)
       for (let j = i + 1; j < list.length; j++) {
@@ -219,7 +245,9 @@ export async function consistencyReport(examId: string) {
     if (diff <= Math.max(0.5, a.attemptQuestion.marks * 0.1)) agreed++;
     if (diff >= Math.max(1, a.attemptQuestion.marks * 0.3)) disagreements.push({ questionId: a.attemptQuestion.questionVersion.questionId, answerId: a.id, aiScore: s.score, finalScore: a.manualScore, marks: a.attemptQuestion.marks });
   }
-  const suggestions = await prisma.aiGradeSuggestion.groupBy({ by: ['decision'], where: { examId, status: 'READY' }, _count: true });
+  // decisions counted on the latest suggestion per answer only (Redo doesn't inflate the numbers)
+  const latestAll = await latestFor(answers.map((a) => a.id));
+  const current = [...latestAll.values()].filter((s) => s.status === 'READY');
   return {
     similarPairs: similarPairs.slice(0, 50),
     disagreements: disagreements.sort((x, y) => Math.abs(y.finalScore - y.aiScore) - Math.abs(x.finalScore - x.aiScore)).slice(0, 50),
@@ -227,9 +255,9 @@ export async function consistencyReport(examId: string) {
       gradedAnswers: graded.length,
       comparedWithAi: compared,
       agreementRate: compared ? Math.round((agreed / compared) * 100) : null,
-      accepted: suggestions.find((s) => s.decision === 'ACCEPTED')?._count ?? 0,
-      adjusted: suggestions.find((s) => s.decision === 'ADJUSTED')?._count ?? 0,
-      undecided: suggestions.find((s) => s.decision === null)?._count ?? 0,
+      accepted: current.filter((s) => s.decision === 'ACCEPTED').length,
+      adjusted: current.filter((s) => s.decision === 'ADJUSTED').length,
+      undecided: current.filter((s) => s.decision === null).length,
     },
   };
 }

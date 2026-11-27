@@ -77,10 +77,18 @@ export async function acknowledge(attemptId: string, acks: { questionId: string;
     if (m && m.seq <= a.seq) memoryOutbox.delete(key);
   }
 }
-export async function dropRejected(attemptId: string, questionIds: string[]) {
-  for (const q of questionIds) {
-    await db.outbox.delete(`${attemptId}:${q}`).catch(() => null);
-    memoryOutbox.delete(`${attemptId}:${q}`);
+/** Drop rejected items — but only the version that was sent (a newer edit made meanwhile is kept). */
+export async function dropRejected(attemptId: string, rejected: { questionId: string; seq: number }[]) {
+  for (const r of rejected) {
+    const key = `${attemptId}:${r.questionId}`;
+    try {
+      const cur = await db.outbox.get(key);
+      if (cur && cur.seq <= r.seq) await db.outbox.delete(key);
+    } catch {
+      /* ignore */
+    }
+    const m = memoryOutbox.get(key);
+    if (m && m.seq <= r.seq) memoryOutbox.delete(key);
   }
 }
 
@@ -98,6 +106,14 @@ export const loadSnapshot = (attemptId: string) => db.snapshots.get(attemptId).c
 export const clearAttempt = async (attemptId: string) => {
   await db.outbox.where('attemptId').equals(attemptId).delete().catch(() => null);
   await db.events.where('attemptId').equals(attemptId).delete().catch(() => null);
+  // the offline copy holds the full paper and answers: never leave it on a shared computer after submitting
+  await db.snapshots.delete(attemptId).catch(() => null);
+  for (const k of [...memoryOutbox.keys()]) if (k.startsWith(`${attemptId}:`)) memoryOutbox.delete(k);
+};
+/** Signing out removes every cached exam from this device. */
+export const clearAllLocal = async () => {
+  await Promise.all([db.outbox.clear(), db.events.clear(), db.snapshots.clear()]).catch(() => null);
+  memoryOutbox.clear();
 };
 
 /** Monotonic per-attempt sequence counter that survives reloads. */

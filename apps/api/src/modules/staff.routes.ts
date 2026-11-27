@@ -13,6 +13,7 @@ import { correctFor, extendDeadline, finalizeAttempt, gradeAttempt } from '../se
 import { issueCertificate } from '../services/certificates.service.js';
 import { audit } from '../core/audit.js';
 import { emitToMonitors, emitToUser } from '../core/realtime.js';
+import rateLimit from 'express-rate-limit';
 import { notify } from '../core/notify.js';
 import { aiConfig, aiEnabled } from '../core/config.js';
 import { AiInputError, batchCandidates, cancelJob, consistencyReport, jobStatus, latestFor, recordDecision, serialize, startBatch, suggestForAnswer } from '../services/ai/assistant.js';
@@ -257,8 +258,12 @@ staffRouter.put('/answers/:id/grade', async (req, res) => {
 
 /* --------------------------------- AI marking assistant --------------------------------- */
 const AI_OFF = 'The AI marking assistant is not configured. Add ANTHROPIC_API_KEY to the server environment.';
+const aiLimit = (limit: number) =>
+  rateLimit({ windowMs: 60_000, limit, keyGenerator: (req) => `ai:${currentUser(req).id}`, standardHeaders: true, legacyHeaders: false, message: { error: { code: 'RATE_LIMIT', message: 'Too many AI requests — wait a moment and try again' } } });
+const aiSuggestLimit = aiLimit(40);
+const aiBatchLimit = rateLimit({ windowMs: 60_000, limit: 6, keyGenerator: (req) => `aib:${currentUser(req).id}`, standardHeaders: true, legacyHeaders: false, message: { error: { code: 'RATE_LIMIT', message: 'Too many batch requests — wait a moment' } } });
 
-staffRouter.post('/answers/:id/ai-suggest', async (req, res) => {
+staffRouter.post('/answers/:id/ai-suggest', aiSuggestLimit, async (req, res) => {
   const me = currentUser(req);
   if (!aiEnabled()) throw conflict(AI_OFF, 'AI_DISABLED');
   const answer = await prisma.answer.findUnique({ where: { id: param(req, 'id') }, select: { id: true, attemptId: true } });
@@ -280,7 +285,7 @@ staffRouter.get('/exams/:id/ai/status', async (req, res) => {
   res.json({ enabled: aiEnabled(), model: aiConfig.model, job: jobStatus(exam.id) });
 });
 
-staffRouter.post('/exams/:id/ai/batch', async (req, res) => {
+staffRouter.post('/exams/:id/ai/batch', aiBatchLimit, async (req, res) => {
   const me = currentUser(req);
   const exam = await loadExamForStaff(me, param(req, 'id'));
   if (!aiEnabled()) throw conflict(AI_OFF, 'AI_DISABLED');

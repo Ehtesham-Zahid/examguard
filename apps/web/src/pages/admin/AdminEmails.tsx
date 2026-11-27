@@ -74,7 +74,7 @@ export default function AdminEmails() {
   }, [q]);
   useEffect(() => setPage(1), [filter, category, query]);
 
-  const params = new URLSearchParams({ page: String(page), pageSize: '25', ...(filter !== 'all' ? { status: filter } : {}), ...(category ? { category } : {}), ...(query ? { q: query } : {}) });
+  const params = new URLSearchParams({ page: String(page), pageSize: '25', ...(filter !== 'all' ? { status: filter === 'PENDING' ? 'PENDING,SENDING' : filter } : {}), ...(category ? { category } : {}), ...(query ? { q: query } : {}) });
   const list = useQuery({
     queryKey: ['admin-emails', params.toString()],
     queryFn: () => api<ListResp>(`/admin/emails?${params}`),
@@ -284,7 +284,17 @@ function DeliveryCard({ cfg }: { cfg: ListResp['config'] }) {
 function EmailPreview({ id, onClose }: { id: string | null; onClose: () => void }) {
   const qc = useQueryClient();
   const [view, setView] = useState<'html' | 'text'>('html');
-  const q = useQuery({ queryKey: ['admin-email', id], queryFn: () => api<Detail>(`/admin/emails/${id}`), enabled: !!id });
+  const q = useQuery({
+    queryKey: ['admin-email', id],
+    queryFn: () => api<Detail>(`/admin/emails/${id}`),
+    enabled: !!id,
+    // keep the open preview current while a retry is in flight
+    refetchInterval: (qq) => (qq.state.data && (qq.state.data.status === 'PENDING' || qq.state.data.status === 'SENDING') ? 2000 : false),
+  });
+  const close = () => {
+    setView('html');
+    onClose();
+  };
   const retry = useMutation({
     mutationFn: () => api<{ id: string }>(`/admin/emails/${id}/retry`, { method: 'POST' }),
     onSuccess: () => {
@@ -298,10 +308,7 @@ function EmailPreview({ id, onClose }: { id: string | null; onClose: () => void 
   return (
     <Modal
       open={!!id}
-      onClose={() => {
-        setView('html');
-        onClose();
-      }}
+      onClose={close}
       size="xl"
       title={r?.subject ?? 'Email'}
       description={r ? `To ${r.user?.name ? `${r.user.name} <${r.to}>` : r.to} · ${KIND_LABEL[r.kind] ?? r.kind}` : undefined}
@@ -313,7 +320,7 @@ function EmailPreview({ id, onClose }: { id: string | null; onClose: () => void 
                 {r.status === 'SENT' ? 'Send again' : 'Retry delivery'}
               </Button>
             )}
-            <Button onClick={onClose}>Close</Button>
+            <Button onClick={close}>Close</Button>
           </>
         )
       }

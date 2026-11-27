@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, CheckCircle2, LinkIcon } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, LinkIcon, WifiOff } from 'lucide-react';
+import { useAuth } from '@/lib/auth';
 import { toast } from 'sonner';
 import { api, errMsg } from '@/lib/api';
 import { Button, ButtonLink, Field, Input, Spinner } from '@/components/ui';
@@ -19,6 +20,7 @@ export default function ResetPassword() {
   const [params] = useSearchParams();
   const token = params.get('token') ?? '';
   const nav = useNavigate();
+  const { user, logout } = useAuth();
   const info = useQuery({ queryKey: ['pw-token', token], queryFn: () => api<TokenInfo>(`/auth/password/token?token=${encodeURIComponent(token)}`), enabled: !!token, retry: false, staleTime: Infinity });
   const [pw, setPw] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -39,6 +41,8 @@ export default function ResetPassword() {
       const r = await api<{ ok: boolean; email: string }>('/auth/password/reset', { body: { token, password: pw } });
       setDone(r.email);
       toast.success('Password saved');
+      // every session was signed out server-side; drop any stale one in this tab so "Sign in" really signs in
+      if (user) await logout();
     } catch (e2) {
       setErrs({ form: errMsg(e2) });
     } finally {
@@ -69,6 +73,20 @@ export default function ResetPassword() {
       </AuthCard>
     );
 
+  if (token && info.isError)
+    return (
+      <AuthCard>
+        <span className="mb-5 grid size-12 place-items-center rounded-xl bg-warn-soft text-warn">
+          <WifiOff className="size-6" aria-hidden />
+        </span>
+        <h1 className="display text-[28px] font-bold">Couldn't check your link</h1>
+        <p className="mt-2 text-[15px] text-ink-2">The server didn't answer in time (it may be waking up). Your link is probably still fine.</p>
+        <Button size="lg" className="mt-6 w-full" onClick={() => info.refetch()} loading={info.isFetching}>
+          Try again
+        </Button>
+      </AuthCard>
+    );
+
   if (!token || !info.data?.valid)
     return (
       <AuthCard>
@@ -96,8 +114,6 @@ export default function ResetPassword() {
         {welcome ? 'Set a password to finish creating your account' : 'Set a new password for'} <strong className="text-ink">{info.data.email}</strong>.
       </p>
       <form onSubmit={submit} className="mt-7 space-y-4" noValidate>
-        {/* hidden username helps password managers save the right account */}
-        <input type="text" autoComplete="username" value={info.data.email} readOnly hidden />
         <Field label="New password" error={errs.pw} hint="8+ characters with a letter and a number" required>
           {(id) => <Input id={id} type="password" autoComplete="new-password" autoFocus value={pw} onChange={(e) => setPw(e.target.value)} invalid={!!errs.pw} />}
         </Field>

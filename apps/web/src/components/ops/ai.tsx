@@ -245,7 +245,7 @@ export function HighlightedAnswer({ text, quotes, active }: { text: string; quot
         p.i == null ? (
           <Fragment key={k}>{p.t}</Fragment>
         ) : (
-          <mark key={k} className={cx('rounded-sm px-0.5 text-inherit transition-colors', active === p.i ? 'bg-hl ring-2 ring-ink/70' : 'bg-hl/45')}>
+          <mark key={k} className={cx('rounded-sm px-0.5 transition-colors', active === p.i ? 'bg-hl text-hl-ink ring-2 ring-ink/70' : 'bg-hl/45 text-inherit')}>
             {p.t}
           </mark>
         ),
@@ -268,7 +268,7 @@ export function ConsistencyReport({ data, loading, label, onOpen }: { data?: Con
     <div className="grid gap-5">
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
-          ['Graded answers', stats.gradedAnswers],
+          ['Answers compared', stats.gradedAnswers],
           ['Agreement with AI', stats.agreementRate == null ? '—' : `${stats.agreementRate}%`],
           ['AI mark used', stats.accepted],
           ['AI mark adjusted', stats.adjusted],

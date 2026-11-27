@@ -15,7 +15,7 @@ export function CreateUserModal({ open, onClose }: { open: boolean; onClose: () 
   const qc = useQueryClient();
   const [form, setForm] = useState({ name: '', email: '', role: 'CANDIDATE' as Role, groupName: '' });
   const [errs, setErrs] = useState<Record<string, string>>({});
-  const [result, setResult] = useState<{ user: UserRow; temporaryPassword?: string } | null>(null);
+  const [result, setResult] = useState<{ user: UserRow; temporaryPassword?: string; emailed?: boolean } | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -26,7 +26,7 @@ export function CreateUserModal({ open, onClose }: { open: boolean; onClose: () 
   }, [open]);
 
   const m = useMutation({
-    mutationFn: () => api<{ user: UserRow; temporaryPassword?: string }>('/users', { method: 'POST', body: { name: form.name.trim(), email: form.email.trim(), role: form.role, groupName: form.groupName.trim() || null } }),
+    mutationFn: () => api<{ user: UserRow; temporaryPassword?: string; emailed?: boolean }>('/users', { method: 'POST', body: { name: form.name.trim(), email: form.email.trim(), role: form.role, groupName: form.groupName.trim() || null } }),
     onSuccess: (r) => {
       setResult(r);
       toast.success(`Account created for ${r.user.name}`);
@@ -77,7 +77,9 @@ export function CreateUserModal({ open, onClose }: { open: boolean; onClose: () 
           <p className="text-sm text-ink-2">
             <strong className="text-ink">{result.user.name}</strong> ({result.user.email}) can now sign in as {ROLE_LABEL[result.user.role].toLowerCase()}.
           </p>
-          <p className="text-sm text-ink-2">A welcome email with a link to set their own password is on its way (valid for 7 days).</p>
+          <p className="text-sm text-ink-2">
+            {result.emailed ? 'A welcome email with a link to set their own password is on its way (valid for 7 days).' : 'No welcome email will be delivered (email is off or this is a demo address) — share the temporary password below. You can check the Email log.'}
+          </p>
           {result.temporaryPassword && <SecretReveal label="Temporary password (if email can’t reach them)" value={result.temporaryPassword} />}
         </div>
       ) : (

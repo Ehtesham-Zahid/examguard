@@ -60,6 +60,7 @@ export default function ResultDetail() {
       setDispute(null);
       setMessage('');
       qc.invalidateQueries({ queryKey: ['result', attemptId] });
+      qc.invalidateQueries({ queryKey: ['my-disputes'] });
     },
     onError: (e) => toast.error(errMsg(e)),
   });
@@ -67,6 +68,8 @@ export default function ResultDetail() {
   if (isLoading) return <Spinner />;
   if (error || !data) return <ErrorBox error={error} onRetry={refetch} />;
   const p = pct(data.attempt.score, data.attempt.maxScore);
+  // the server accepts disputes for 7 days after publication; don't invite one it will refuse
+  const disputeOpen = !data.exam.publishedAt || Date.now() - new Date(data.exam.publishedAt).getTime() < 7 * 86_400_000;
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -77,7 +80,11 @@ export default function ResultDetail() {
           <h1 className="display mt-1 text-[30px] font-semibold">{data.exam.title}</h1>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" icon={<MessageSquareWarning className="size-4" />} onClick={() => setDispute({ questionId: null })}>Raise a dispute</Button>
+          {disputeOpen ? (
+            <Button variant="outline" icon={<MessageSquareWarning className="size-4" />} onClick={() => setDispute({ questionId: null })}>Raise a dispute</Button>
+          ) : (
+            <span className="inline-flex h-10 items-center rounded-lg border border-dashed border-line-strong px-3 text-[13px] text-muted">Dispute window closed (7 days)</span>
+          )}
           <Button icon={<Download className="size-4" />} loading={dl.busy !== null} onClick={() => dl.run(`/reports/attempts/${attemptId}/pdf`, 'result.pdf')}>Download report</Button>
         </div>
       </div>
@@ -189,7 +196,7 @@ export default function ResultDetail() {
                   <Badge>{q.topic}</Badge>
                   {q.voided && <Badge tone="info">Voided — full marks awarded</Badge>}
                   <span className={cx('ml-auto tabular text-sm font-semibold', full ? 'text-ok' : q.score > 0 ? 'text-warn' : 'text-danger')}>{q.score} / {q.marks}</span>
-                  <button onClick={() => setDispute({ questionId: q.id })} className="rounded-md p-1 text-muted hover:bg-surface-2 hover:text-ink" aria-label={`Dispute question ${q.position}`} title="Dispute this question"><Flag className="size-4" /></button>
+                  {disputeOpen && <button onClick={() => setDispute({ questionId: q.id })} className="rounded-md p-1 text-muted hover:bg-surface-2 hover:text-ink" aria-label={`Dispute question ${q.position}`} title="Dispute this question"><Flag className="size-4" /></button>}
                 </div>
                 <RichText text={q.body} className="text-[15px] text-ink-2" />
                 {q.type !== 'WRITTEN' ? (

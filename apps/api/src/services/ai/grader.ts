@@ -65,7 +65,12 @@ export const inputHash = (i: GradeInput) => crypto.createHash('sha256').update(J
 
 /** Remove contact details a candidate may have typed, so they never reach the model. */
 export const redactPII = (t: string) =>
-  t.replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, '[email]').replace(/(\+?\d[\d\s-]{8,}\d)/g, '[number]');
+  t
+    .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, '[email]')
+    // phone-like only (a leading + or grouped digits), so long numeric answers such as 1099511627776 survive
+    .replace(/\+\d[\d\s-]{7,}\d|\b\d{3,5}[\s-]\d{3,4}[\s-]\d{3,4}\b/g, '[number]');
+/** The answer can't close our delimiter early. */
+const fence = (t: string) => t.replace(/<\/?\s*answer\s*>/gi, '[answer-tag]');
 
 const norm = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase();
 
@@ -102,7 +107,7 @@ export async function suggestGrade(input: GradeInput) {
       // the question + rubric block repeats for every answer to the same question, so cache it
       { type: 'text', text: `Question (worth ${input.maxMarks} marks):\n${input.question}\n\nRubric:\n${input.rubric?.trim() || '(none provided)'}`, cache_control: { type: 'ephemeral' } },
     ],
-    messages: [{ role: 'user', content: `<answer>\n${redactPII(input.answer)}\n</answer>\n\nPropose a mark out of ${input.maxMarks}.` }],
+    messages: [{ role: 'user', content: `<answer>\n${fence(redactPII(input.answer))}\n</answer>\n\nPropose a mark out of ${input.maxMarks}.` }],
   });
   if (response.stop_reason === 'refusal') throw new AiDeclinedError('Claude declined to mark this answer. Please mark it yourself.');
   if (response.stop_reason === 'max_tokens' || !response.parsed_output) throw new Error('The AI response was incomplete. Try again.');

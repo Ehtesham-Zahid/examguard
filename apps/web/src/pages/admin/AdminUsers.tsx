@@ -27,7 +27,7 @@ export default function AdminUsers() {
   const [editing, setEditing] = useState<UserRow | null>(null);
   const [resetting, setResetting] = useState<UserRow | null>(null);
   const [toggling, setToggling] = useState<UserRow | null>(null);
-  const [secret, setSecret] = useState<{ user: UserRow; password: string } | null>(null);
+  const [secret, setSecret] = useState<{ user: UserRow; password: string; emailed?: boolean } | null>(null);
 
   const params = new URLSearchParams({ page: String(page), pageSize: String(PAGE) });
   if (q) params.set('search', q);
@@ -37,10 +37,10 @@ export default function AdminUsers() {
   const counts = overview.data?.users ?? {};
 
   const reset = useMutation({
-    mutationFn: (u: UserRow) => api<{ temporaryPassword: string }>(`/users/${u.id}/reset-password`, { method: 'POST' }),
+    mutationFn: (u: UserRow) => api<{ temporaryPassword: string; emailed?: boolean }>(`/users/${u.id}/reset-password`, { method: 'POST' }),
     onSuccess: (r, u) => {
       setResetting(null);
-      setSecret({ user: u, password: r.temporaryPassword });
+      setSecret({ user: u, password: r.temporaryPassword, emailed: r.emailed });
       qc.invalidateQueries({ queryKey: ['users'] });
     },
     onError: (e) => toast.error(errMsg(e)),
@@ -226,7 +226,15 @@ export default function AdminUsers() {
         {secret && (
           <div className="space-y-3">
             <p className="text-sm text-ink-2">
-              We emailed <strong className="text-ink">{secret.user.name}</strong> a one-time link to choose a new password. If email can’t reach them, share this temporary password through a trusted channel instead.
+              {secret.emailed ? (
+                <>
+                  We emailed <strong className="text-ink">{secret.user.name}</strong> a one-time link to choose a new password. If it doesn't arrive, share this temporary password through a trusted channel.
+                </>
+              ) : (
+                <>
+                  Share this temporary password with <strong className="text-ink">{secret.user.name}</strong> through a trusted channel (no email can be delivered to this account).
+                </>
+              )}
             </p>
             <SecretReveal label="Temporary password" value={secret.password} />
           </div>

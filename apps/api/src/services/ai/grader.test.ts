@@ -24,6 +24,8 @@ describe('AI grader safety', () => {
   it('redacts emails and phone numbers before sending', () => {
     expect(redactPII('mail me at ali.raza@uni.edu.pk or +92 300 1234567')).toBe('mail me at [email] or [number]');
     expect(redactPII('O(1) push, 3 items')).toBe('O(1) push, 3 items');
+    expect(redactPII('2^40 = 1099511627776 bytes')).toBe('2^40 = 1099511627776 bytes'); // numeric answers survive
+    expect(redactPII('call 0300-123-4567')).toBe('call [number]');
   });
   it('fingerprints the inputs that determine a suggestion', () => {
     expect(inputHash(input)).toBe(inputHash({ ...input }));

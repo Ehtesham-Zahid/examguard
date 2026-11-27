@@ -54,7 +54,7 @@ export function PreferenceControls({ prefs, onChange, compact }: { prefs: Prefs;
 /** Per-category email opt-outs; account & security emails are always sent. */
 function EmailPreferences() {
   const { user, setUser } = useAuth();
-  const [saving, setSaving] = useState<string | null>(null);
+  const [saving, setSaving] = useState<Set<string>>(new Set());
   if (!user) return null;
   const prefs = user.prefs ?? {};
   const candidate = user.role === 'CANDIDATE';
@@ -66,7 +66,7 @@ function EmailPreferences() {
       ]
     : [{ key: 'emailDisputes', label: 'New result disputes', description: 'When a candidate disputes a result on one of your exams.' }];
   const set = async (key: (typeof items)[number]['key'], v: boolean) => {
-    setSaving(key);
+    setSaving((s) => new Set(s).add(key));
     try {
       const r = await api<{ prefs: Prefs }>('/auth/prefs', { method: 'PUT', body: { [key]: v } });
       setUser({ ...user, prefs: r.prefs });
@@ -74,7 +74,11 @@ function EmailPreferences() {
     } catch (e) {
       toast.error(errMsg(e));
     } finally {
-      setSaving(null);
+      setSaving((s) => {
+        const n = new Set(s);
+        n.delete(key);
+        return n;
+      });
     }
   };
   return (
@@ -82,8 +86,8 @@ function EmailPreferences() {
       <CardHeader title={<span className="flex items-center gap-2"><Mail className="size-4" /> Email notifications</span>} subtitle={<>Sent to <strong className="text-ink">{user.email}</strong>. You’ll always see these in the app’s notification bell too.</>} />
       <div className="divide-y divide-line px-5">
         {items.map((i) => (
-          <div key={i.key} className={cx('py-4', saving === i.key && 'opacity-70')}>
-            <Toggle checked={prefs[i.key] !== false} disabled={saving === i.key} onChange={(v) => set(i.key, v)} label={i.label} description={i.description} />
+          <div key={i.key} className={cx('py-4', saving.has(i.key) && 'opacity-70')}>
+            <Toggle checked={prefs[i.key] !== false} disabled={saving.has(i.key)} onChange={(v) => set(i.key, v)} label={i.label} description={i.description} />
           </div>
         ))}
         <p className="py-4 text-[13px] text-muted">Account and security emails — welcome links, password resets and password-change alerts — are always sent.</p>

@@ -102,14 +102,14 @@ export default function Login() {
             <Field label="Email" error={errors.email} required>
               {(id) => <Input id={id} type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} invalid={!!errors.email} placeholder="you@university.edu" />}
             </Field>
-            <div className="-mb-2 flex justify-end">
+            <Field label="Password" error={errors.password} required>
+              {(id) => <Input id={id} type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} invalid={!!errors.password} />}
+            </Field>
+            <div className="-mt-2 flex justify-end">
               <Link to="/forgot-password" className="text-[13px] font-medium text-ink-2 underline-offset-2 hover:text-ink hover:underline">
                 Forgot password?
               </Link>
             </div>
-            <Field label="Password" error={errors.password} required>
-              {(id) => <Input id={id} type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} invalid={!!errors.password} />}
-            </Field>
             {error && (
               <div role="alert" className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2.5 text-sm text-danger">
                 {error}
@@ -132,10 +132,10 @@ export default function Login() {
                     setPassword(d.password);
                     setErrors({});
                   }}
-                  className="flex items-center justify-between rounded-lg bg-surface-2 px-3 py-2 text-left text-sm hover:bg-line"
+                  className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 rounded-lg bg-surface-2 px-3 py-2 text-left text-sm hover:bg-line"
                 >
                   <span className="font-medium">{d.role}</span>
-                  <span className="font-mono text-xs text-muted">{d.email}</span>
+                  <span className="min-w-0 break-all font-mono text-xs text-ink-2">{d.email}</span>
                 </button>
               ))}
             </div>

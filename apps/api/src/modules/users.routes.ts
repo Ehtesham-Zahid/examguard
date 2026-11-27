@@ -11,20 +11,27 @@ import { audit, verifyAuditChain } from '../core/audit.js';
 import { passwordSchema } from './auth.routes.js';
 import { loadExamForStaff } from '../core/policy.js';
 import { disconnectUser } from '../core/realtime.js';
-import { issuePasswordToken, queueEmails, queueExamEmail } from '../services/email/outbox.js';
+import { examKey, isReservedAddress, issuePasswordToken, queueEmails, queueExamEmail } from '../services/email/outbox.js';
+import { config, emailConfigured } from '../core/config.js';
 import { examPhase } from '../domain/examPhase.js';
 
 const WELCOME_TTL = 7 * 86_400_000;
 
 /** Welcome email with a one-time "set your password" link (the temporary password still works too). */
 async function sendWelcome(users: { id: string; email: string; name: string; role: string }[], invitedBy: string) {
-  const items = [];
-  for (const u of users) {
-    const { token, expiresAt } = await issuePasswordToken(u.id, 'welcome', WELCOME_TTL);
-    items.push({ user: u, kind: 'welcome' as const, data: { token, expiresAt: expiresAt.toISOString(), role: u.role, invitedBy } });
+  try {
+    const items = [];
+    for (const u of users) {
+      const { token, expiresAt } = await issuePasswordToken(u.id, 'welcome', WELCOME_TTL);
+      items.push({ user: u, kind: 'welcome' as const, data: { token, expiresAt: expiresAt.toISOString(), role: u.role, invitedBy } });
+    }
+    await queueEmails(items);
+  } catch (e) {
+    console.error('[email] welcome emails failed', e); // accounts exist and temp passwords are returned regardless
   }
-  await queueEmails(items);
 }
+/** Whether an account email to this address will actually be delivered (vs. recorded only). */
+const willEmail = (address: string) => emailConfigured() && (!isReservedAddress(address) || config.email.allowReservedDomains);
 
 export const usersRouter = Router();
 usersRouter.use(authenticate);
@@ -75,7 +82,7 @@ usersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
   });
   audit(currentUser(req).id, 'user.create', 'User', user.id, { email: user.email, role: user.role });
   await sendWelcome([{ id: user.id, email: user.email, name: user.name, role: user.role }], currentUser(req).name);
-  res.status(201).json({ user, temporaryPassword: body.password ? undefined : password, emailed: true });
+  res.status(201).json({ user, temporaryPassword: body.password ? undefined : password, emailed: willEmail(user.email) });
 });
 
 usersRouter.patch('/:id', requireRole('ADMIN'), async (req, res) => {
@@ -103,9 +110,13 @@ usersRouter.post('/:id/reset-password', requireRole('ADMIN'), async (req, res) =
   const u = await prisma.user.update({ where: { id }, data: { passwordHash: await bcrypt.hash(password, 10), mustChangePassword: true, tokenVersion: { increment: 1 }, failedLogins: 0, lockedUntil: null } });
   disconnectUser(id);
   audit(currentUser(req).id, 'user.reset_password', 'User', id);
-  const { token, expiresAt } = await issuePasswordToken(id, 'reset', 86_400_000);
-  await queueEmails([{ user: u, kind: 'password_reset', data: { token, expiresAt: expiresAt.toISOString() } }]);
-  res.json({ temporaryPassword: password, emailed: true });
+  try {
+    const { token, expiresAt } = await issuePasswordToken(id, 'reset', 86_400_000);
+    await queueEmails([{ user: u, kind: 'password_reset', data: { token, expiresAt: expiresAt.toISOString() } }]);
+  } catch (e) {
+    console.error('[email] reset email failed', e);
+  }
+  res.json({ temporaryPassword: password, emailed: willEmail(u.email) });
 });
 
 /** Bulk candidate import: CSV text or JSON array. dryRun=true returns a validation preview. */
@@ -180,9 +191,9 @@ usersRouter.post('/import', requireRole('ADMIN', 'EXAMINER'), async (req, res) =
   audit(currentUser(req).id, 'user.import', 'User', null, { count: created.length });
   await sendWelcome(createdUsers, currentUser(req).name);
   if (body.enrollExamId) {
-    const exam = await prisma.exam.findUnique({ where: { id: body.enrollExamId } });
+    const exam = await prisma.exam.findUnique({ where: { id: body.enrollExamId } }).catch(() => null);
     if (exam?.status === 'PUBLISHED' && createdUsers.length)
-      await queueExamEmail(exam.id, createdUsers.map((u) => u.id), examPhase(exam) === 'ONGOING' ? 'exam_open' : 'exam_scheduled', (u) => (examPhase(exam) === 'ONGOING' ? `open:${exam.id}:${u}` : `scheduled:${exam.id}:${u}:${exam.publishedAt?.getTime()}`));
+      await queueExamEmail(exam.id, createdUsers.map((u) => u.id), examPhase(exam) === 'ONGOING' ? 'exam_open' : 'exam_scheduled', (u) => examKey(examPhase(exam) === 'ONGOING' ? 'open' : 'scheduled', exam, u));
   }
   res.json({ total: rows.length, created: created.length, skipped: rows.length - created.length, credentials: created, results });
 });

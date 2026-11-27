@@ -123,16 +123,30 @@ authRouter.post('/change-password', authenticate, async (req, res) => {
 
 /* ------------------------------------------------ password links (welcome, admin reset, forgot) */
 const FORGOT_TTL = 60 * 60_000;
-// 5 requests / 15 min per IP + address: enough for a typo, useless for mail-bombing someone
-const forgotLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 5, keyGenerator: (req) => `${ipKeyGenerator(req.ip ?? '')}:${String(req.body?.email ?? '').toLowerCase()}`, standardHeaders: true, legacyHeaders: false, message: { error: { code: 'RATE_LIMIT', message: 'Too many reset requests — try again in a few minutes' } } });
+const limitMsg = { error: { code: 'RATE_LIMIT', message: 'Too many reset requests — try again in a few minutes' } };
+const normEmail = (v: unknown) => String(v ?? '').trim().toLowerCase();
+// forgot: 5 per address+IP per 15 min (typos) AND 10 per IP per hour regardless of address (no mail-bombing many accounts)
+const forgotLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 5, keyGenerator: (req) => `fp:${ipKeyGenerator(req.ip ?? '')}:${normEmail(req.body?.email)}`, standardHeaders: true, legacyHeaders: false, message: limitMsg });
+const forgotIpLimiter = rateLimit({ windowMs: 60 * 60_000, limit: 10, keyGenerator: (req) => `fpip:${ipKeyGenerator(req.ip ?? '')}`, standardHeaders: true, legacyHeaders: false, message: limitMsg });
+// reset: keyed by the link itself, so a whole exam hall behind one IP can set passwords at once
+const resetLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 10, keyGenerator: (req) => `rp:${String(req.body?.token ?? '').slice(0, 24)}`, standardHeaders: true, legacyHeaders: false, message: limitMsg });
+const resetIpLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 300, keyGenerator: (req) => `rpip:${ipKeyGenerator(req.ip ?? '')}`, standardHeaders: true, legacyHeaders: false, message: limitMsg });
+// self-service reset emails are capped per account per day and overall per day, so they can never eat the sending quota
+const FORGOT_PER_ACCOUNT_DAY = 3;
+const FORGOT_GLOBAL_DAY = Number(process.env.FORGOT_EMAILS_PER_DAY) || 40;
 
 /** Always answers the same way, so it can't be used to discover which emails have accounts. */
-authRouter.post('/password/forgot', forgotLimiter, async (req, res) => {
+authRouter.post('/password/forgot', forgotIpLimiter, forgotLimiter, async (req, res) => {
   const { email } = parseBody(z.object({ email: z.string().trim().toLowerCase().email('Enter a valid email address') }), req);
   const user = await prisma.user.findUnique({ where: { email } });
   if (user && user.status === 'ACTIVE') {
-    const recent = await prisma.passwordToken.findFirst({ where: { userId: user.id, purpose: 'forgot', createdAt: { gt: new Date(Date.now() - 60_000) } } });
-    if (!recent) {
+    const dayAgo = new Date(Date.now() - 86_400_000);
+    const [recent, today, globalToday] = await Promise.all([
+      prisma.passwordToken.findFirst({ where: { userId: user.id, purpose: 'forgot', createdAt: { gt: new Date(Date.now() - 60_000) } } }),
+      prisma.passwordToken.count({ where: { userId: user.id, purpose: 'forgot', createdAt: { gt: dayAgo } } }),
+      prisma.passwordToken.count({ where: { purpose: 'forgot', createdAt: { gt: dayAgo } } }),
+    ]);
+    if (!recent && today < FORGOT_PER_ACCOUNT_DAY && globalToday < FORGOT_GLOBAL_DAY) {
       const { token, expiresAt } = await issuePasswordToken(user.id, 'forgot', FORGOT_TTL);
       await queueEmails([{ user, kind: 'password_forgot', data: { token, expiresAt: expiresAt.toISOString() } }]);
       audit(user.id, 'auth.password_forgot', 'User', user.id, { ip: req.ip });
@@ -155,7 +169,7 @@ authRouter.get('/password/token', async (req, res) => {
   res.json({ valid: true, purpose: t.purpose, name: t.user.name.split(' ')[0], email: maskEmail(t.user.email), expiresAt: t.expiresAt });
 });
 
-authRouter.post('/password/reset', forgotLimiter, async (req, res) => {
+authRouter.post('/password/reset', resetIpLimiter, resetLimiter, async (req, res) => {
   const { token, password } = parseBody(z.object({ token: z.string().min(20).max(200), password: passwordSchema }), req);
   const t = await findToken(token);
   if (!t) throw badRequest('This link has expired or was already used. Request a new one.');

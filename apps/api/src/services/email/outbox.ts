@@ -11,7 +11,7 @@ import { prisma } from '../../core/prisma.js';
 import { config, emailConfigured, emailMode } from '../../core/config.js';
 import { CATEGORY, examIcs, renderEmail, type EmailData, type EmailKind, type ExamInfo } from './templates.js';
 
-const MAX_ATTEMPTS = 5;
+const MAX_ATTEMPTS = 8; // 30s → ~1h backoff: about two hours of retries for transient outages
 const BATCH = 10;
 
 /* ------------------------------------------------------------------ preferences */
@@ -81,8 +81,13 @@ export const queueEmail = (i: QueueItem) => queueEmails([i]);
 /** Queue the same email for many user ids (loads names, addresses and preferences). */
 export async function queueForUsers(userIds: string[], kind: EmailKind, data: Record<string, unknown>, dedupe?: (userId: string) => string) {
   if (!userIds.length) return 0;
-  const users = await prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, email: true, name: true, prefs: true, status: true } });
-  return queueEmails(users.map((u) => ({ user: u, kind, data, dedupeKey: dedupe?.(u.id) })));
+  try {
+    const users = await prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, email: true, name: true, prefs: true, status: true } });
+    return await queueEmails(users.map((u) => ({ user: u, kind, data, dedupeKey: dedupe?.(u.id) })));
+  } catch (e) {
+    console.error('[email] failed to queue', kind, e); // never fail the action that triggered the email
+    return 0;
+  }
 }
 
 export const examInfo = (e: { id: string; title: string; windowStart: Date; windowEnd: Date; durationMin: number; totalMarks?: number; accessCode?: string | null; owner?: { name: string } | null }, extraTimePct = 0): ExamInfo => ({
@@ -99,14 +104,22 @@ export const examInfo = (e: { id: string; title: string; windowStart: Date; wind
 
 /** Exam emails carry each candidate's own extra-time accommodation, so they're queued per enrolment. */
 export async function queueExamEmail(examId: string, candidateIds: string[] | 'all', kind: 'exam_scheduled' | 'exam_reminder' | 'exam_open', dedupe: (userId: string) => string) {
-  const exam = await prisma.exam.findUnique({ where: { id: examId }, include: { owner: { select: { name: true } } } });
-  if (!exam) return 0;
-  const enr = await prisma.enrollment.findMany({
-    where: { examId, ...(candidateIds === 'all' ? {} : { candidateId: { in: candidateIds } }) },
-    include: { candidate: { select: { id: true, email: true, name: true, prefs: true, status: true } } },
-  });
-  return queueEmails(enr.map((e) => ({ user: e.candidate, kind, data: { exam: examInfo(exam, e.extraTimePct ?? 0) }, dedupeKey: dedupe(e.candidateId) })));
+  try {
+    const exam = await prisma.exam.findUnique({ where: { id: examId }, include: { owner: { select: { name: true } } } });
+    if (!exam) return 0;
+    const enr = await prisma.enrollment.findMany({
+      where: { examId, ...(candidateIds === 'all' ? {} : { candidateId: { in: candidateIds } }) },
+      include: { candidate: { select: { id: true, email: true, name: true, prefs: true, status: true } } },
+    });
+    return await queueEmails(enr.map((e) => ({ user: e.candidate, kind, data: { exam: examInfo(exam, e.extraTimePct ?? 0) }, dedupeKey: dedupe(e.candidateId) })));
+  } catch (e) {
+    console.error('[email] failed to queue', kind, e);
+    return 0;
+  }
 }
+
+/** Dedupe keys include the window start, so moving an exam re-announces it and re-arms reminders. */
+export const examKey = (kind: 'scheduled' | 'reminder' | 'open', exam: { id: string; windowStart: Date }, userId: string) => `${kind}:${exam.id}:${userId}:${exam.windowStart.getTime()}`;
 
 /* ------------------------------------------------------------------ password tokens */
 export const hashToken = (t: string) => crypto.createHash('sha256').update(t).digest('hex');
@@ -165,6 +178,7 @@ class RelayError extends Error {
   constructor(
     message: string,
     public permanent = false,
+    public quota = false,
   ) {
     super(message);
   }
@@ -190,13 +204,14 @@ async function callRelay(body: Record<string, unknown>) {
   try {
     json = JSON.parse(raw);
   } catch {
-    // an HTML page means the deployment is wrong (not "Anyone" access, or a /dev URL)
+    // Google 5xx pages are transient; any other HTML means the deployment is wrong (not "Anyone" access, or a /dev URL)
+    if (res.status >= 500) throw new RelayError(`Google Apps Script is temporarily unavailable (HTTP ${res.status}).`);
     throw new RelayError(/<html|<!doctype/i.test(raw) ? 'The relay URL returned a web page instead of JSON — redeploy the Apps Script as a Web app with access "Anyone" and use the /exec URL.' : `Relay returned an unexpected response (HTTP ${res.status}).`, true);
   }
   if (!json?.ok) {
     const msg = json?.error ?? `Relay error (HTTP ${res.status})`;
     // wrong secret / bad request won't fix themselves; quota and Google hiccups will
-    throw new RelayError(msg, /secret|invalid|unauthori[sz]ed|bad request/i.test(msg));
+    throw new RelayError(msg, /secret|invalid|unauthori[sz]ed|bad request/i.test(msg), /quota|too many times/i.test(msg));
   }
   return json;
 }
@@ -256,34 +271,44 @@ function attachmentsFor(row: EmailOutbox) {
   return [];
 }
 
-/** Links with tokens are removed from stored data once delivered, so the log never holds a usable link. */
+/** Links with tokens are removed from stored data once an email is final (sent, skipped or failed). */
 function redact(data: unknown) {
   const d = { ...(data as Record<string, unknown>) };
   if ('token' in d) d.token = null;
   return d as Prisma.InputJsonValue;
 }
+/** Render for admins: never with a live link. */
+export function renderRowForPreview(row: Pick<EmailOutbox, 'kind' | 'data'>) {
+  return renderEmail(row.kind as EmailKind, { ...(row.data as EmailData), token: null });
+}
 
 async function deliver(row: EmailOutbox) {
   if (isReservedAddress(row.to) && !config.email.allowReservedDomains) {
-    return prisma.emailOutbox.update({ where: { id: row.id }, data: { status: 'SKIPPED', lastError: 'Demo address on a reserved domain — it can never receive mail' } });
+    return prisma.emailOutbox.update({ where: { id: row.id }, data: { status: 'SKIPPED', lastError: 'Demo address on a reserved domain — it can never receive mail', data: redact(row.data) } });
   }
   if (!emailConfigured() && !testTransport) {
-    return prisma.emailOutbox.update({ where: { id: row.id }, data: { status: 'SKIPPED', lastError: NOT_CONFIGURED } });
+    return prisma.emailOutbox.update({ where: { id: row.id }, data: { status: 'SKIPPED', lastError: NOT_CONFIGURED, data: redact(row.data) } });
   }
   const r = renderRow(row);
+  let messageId: string | null;
   try {
-    const messageId = await send({ id: row.id, kind: row.kind, to: row.to, replyTo: config.email.replyTo, subject: r.subject, html: r.html, text: r.text, attachments: attachmentsFor(row) });
-    await prisma.emailOutbox.update({ where: { id: row.id }, data: { status: 'SENT', sentAt: new Date(), messageId, lastError: null, data: redact(row.data) } });
+    messageId = await send({ id: row.id, kind: row.kind, to: row.to, replyTo: config.email.replyTo, subject: r.subject, html: r.html, text: r.text, attachments: attachmentsFor(row) });
   } catch (e) {
+    if (e instanceof RelayError && e.quota) {
+      // daily sending quota: wait for it to reset instead of burning attempts (Google's window is a rolling 24h)
+      return prisma.emailOutbox.update({ where: { id: row.id }, data: { status: 'PENDING', attempts: { decrement: 1 }, lastError: 'Daily Gmail sending quota reached — will retry automatically in an hour', sendAfter: new Date(Date.now() + 3600_000) } });
+    }
     // permanent rejection (SMTP 5xx, wrong relay secret, bad deployment): retrying won't help; an admin can retry after fixing it
     const permanent = e instanceof RelayError ? e.permanent : ((e as { responseCode?: number }).responseCode ?? 0) >= 500;
     const final = permanent || row.attempts >= MAX_ATTEMPTS;
-    const backoffSec = Math.min(3600, 30 * 2 ** (row.attempts - 1)); // 30s, 1m, 2m, 4m…
-    await prisma.emailOutbox.update({
+    const backoffSec = Math.min(3600, 30 * 2 ** (row.attempts - 1)); // 30s, 1m, 2m, 4m … capped at 1h
+    return prisma.emailOutbox.update({
       where: { id: row.id },
-      data: { status: final ? 'FAILED' : 'PENDING', lastError: friendlyError(e), sendAfter: new Date(Date.now() + backoffSec * 1000) },
+      data: { status: final ? 'FAILED' : 'PENDING', lastError: friendlyError(e), sendAfter: new Date(Date.now() + backoffSec * 1000), ...(final ? { data: redact(row.data) } : {}) },
     });
   }
+  // outside the try: a DB hiccup here must not mark a delivered email for resending
+  await prisma.emailOutbox.update({ where: { id: row.id }, data: { status: 'SENT', sentAt: new Date(), messageId, lastError: null, data: redact(row.data) } }).catch((e) => console.error('[email] sent but could not record', row.id, e));
 }
 
 /** Claims due rows atomically; safe with several server instances. */
@@ -347,22 +372,26 @@ export async function scheduleExamEmails(now = new Date()) {
   const t = now.getTime();
   const soon = await prisma.exam.findMany({
     where: { status: 'PUBLISHED', windowStart: { gt: new Date(t + 2 * HOUR), lte: new Date(t + 24 * HOUR) }, publishedAt: { lt: new Date(t - 12 * HOUR) } },
-    select: { id: true },
+    select: { id: true, windowStart: true },
   });
   for (const e of soon) {
+    // skip people who were told about this exact schedule in the last 12h
     const recent = await prisma.emailOutbox.findMany({ where: { kind: 'exam_scheduled', createdAt: { gt: new Date(t - 12 * HOUR) }, dedupeKey: { startsWith: `scheduled:${e.id}:` } }, select: { userId: true } });
     const skip = new Set(recent.map((r) => r.userId));
     const ids = (await prisma.enrollment.findMany({ where: { examId: e.id }, select: { candidateId: true } })).map((x) => x.candidateId).filter((id) => !skip.has(id));
-    if (ids.length) await queueExamEmail(e.id, ids, 'exam_reminder', (u) => `reminder:${e.id}:${u}`);
+    if (ids.length) await queueExamEmail(e.id, ids, 'exam_reminder', (u) => examKey('reminder', e, u));
   }
   const open = await prisma.exam.findMany({
-    where: { status: 'PUBLISHED', pausedAt: null, windowStart: { lte: now, gt: new Date(t - 30 * 60_000) }, windowEnd: { gt: now } },
-    select: { id: true },
+    where: { status: 'PUBLISHED', pausedAt: null, windowStart: { lte: now, gt: new Date(t - 3 * HOUR) }, windowEnd: { gt: now } },
+    select: { id: true, windowStart: true, settings: true, pausedSec: true },
   });
   for (const e of open) {
+    const lateJoinMin = Number((e.settings as { lateJoinMin?: number } | null)?.lateJoinMin ?? 0);
+    const sendUntil = e.windowStart.getTime() + e.pausedSec * 1000 + (lateJoinMin > 0 ? Math.min(30, lateJoinMin) : 30) * 60_000;
+    if (t > sendUntil) continue; // never tell people to "start now" after late entry has closed
     const started = new Set((await prisma.attempt.findMany({ where: { examId: e.id }, select: { candidateId: true } })).map((a) => a.candidateId));
     const ids = (await prisma.enrollment.findMany({ where: { examId: e.id }, select: { candidateId: true } })).map((x) => x.candidateId).filter((id) => !started.has(id));
-    if (ids.length) await queueExamEmail(e.id, ids, 'exam_open', (u) => `open:${e.id}:${u}`);
+    if (ids.length) await queueExamEmail(e.id, ids, 'exam_open', (u) => examKey('open', e, u));
   }
 }
 

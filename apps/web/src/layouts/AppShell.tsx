@@ -204,10 +204,10 @@ export function AppShell() {
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
   }, []);
+  const mode = useThemeMode(); // hooks before any early return
+  const dark = mode === 'dark';
   if (!user) return null;
   const items = NAV[user.role];
-  const mode = useThemeMode();
-  const dark = mode === 'dark';
   const roleLabel = { ADMIN: 'Administrator', EXAMINER: 'Examiner', CANDIDATE: 'Candidate' }[user.role];
 
   const sidebar = (

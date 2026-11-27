@@ -12,7 +12,7 @@ import { finalizeAttempt, recomputeExamTotals, snapshotBlueprintPool } from '../
 import { audit } from '../core/audit.js';
 import { emitToCandidates, emitToMonitors } from '../core/realtime.js';
 import { notify } from '../core/notify.js';
-import { queueExamEmail } from '../services/email/outbox.js';
+import { examKey, queueExamEmail } from '../services/email/outbox.js';
 
 export const examsRouter = Router();
 examsRouter.use(authenticate, requireRole('ADMIN', 'EXAMINER'));
@@ -112,6 +112,9 @@ examsRouter.put('/:id', async (req, res) => {
     if (changed.length) throw conflict(`Exam rules cannot change while the exam is ongoing (${changed.join(', ')})`);
   }
   const updated = await prisma.exam.update({ where: { id: exam.id }, data: { ...body, accessCode: body.accessCode || null, settings: { ...readSettings(exam.settings), ...body.settings } } });
+  // a published exam that moved: tell enrolled candidates the new schedule (new key = new email + fresh reminders)
+  if (exam.status === 'PUBLISHED' && (updated.windowStart.getTime() !== exam.windowStart.getTime() || updated.windowEnd.getTime() !== exam.windowEnd.getTime()) && examPhase(updated) === 'PUBLISHED')
+    await queueExamEmail(exam.id, 'all', 'exam_scheduled', (u) => examKey('scheduled', updated, u));
   audit(me.id, 'exam.update', 'Exam', exam.id);
   res.json(updated);
 });
@@ -247,8 +250,8 @@ examsRouter.post('/:id/publish', async (req, res) => {
   const enrolled = await prisma.enrollment.findMany({ where: { examId: exam.id }, select: { candidateId: true } });
   await notify(enrolled.map((e) => e.candidateId), 'New examination scheduled', `${exam.title} opens ${exam.windowStart.toUTCString()}`, `/candidate/exams/${exam.id}`);
   // one email per publication (a republish after unpublish/edit announces the possibly-new schedule)
-  if (examPhase(updated) === 'ONGOING') await queueExamEmail(exam.id, 'all', 'exam_open', (u) => `open:${exam.id}:${u}`);
-  else await queueExamEmail(exam.id, 'all', 'exam_scheduled', (u) => `scheduled:${exam.id}:${u}:${updated.publishedAt?.getTime()}`);
+  if (examPhase(updated) === 'ONGOING') await queueExamEmail(exam.id, 'all', 'exam_open', (u) => examKey('open', updated, u));
+  else await queueExamEmail(exam.id, 'all', 'exam_scheduled', (u) => examKey('scheduled', updated, u));
   audit(me.id, 'exam.publish', 'Exam', exam.id);
   res.json(updated);
 });
@@ -375,8 +378,8 @@ examsRouter.post('/:id/enrollments', async (req, res) => {
   const added = valid.map((v) => v.id).filter((id) => !already.has(id));
   if (exam.status === 'PUBLISHED' && added.length) {
     await notify(added, 'You have been enrolled', exam.title, `/candidate/exams/${exam.id}`);
-    if (examPhase(exam) === 'ONGOING') await queueExamEmail(exam.id, added, 'exam_open', (u) => `open:${exam.id}:${u}`);
-    else await queueExamEmail(exam.id, added, 'exam_scheduled', (u) => `scheduled:${exam.id}:${u}:${exam.publishedAt?.getTime()}`);
+    if (examPhase(exam) === 'ONGOING') await queueExamEmail(exam.id, added, 'exam_open', (u) => examKey('open', exam, u));
+    else await queueExamEmail(exam.id, added, 'exam_scheduled', (u) => examKey('scheduled', exam, u));
   }
   audit(me.id, 'exam.enroll', 'Exam', exam.id, { added: result.count });
   res.json({ added: result.count, alreadyEnrolled: valid.length - result.count, unknownEmails });

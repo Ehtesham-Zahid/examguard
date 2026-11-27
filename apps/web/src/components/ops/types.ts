@@ -196,6 +196,7 @@ export interface AiJob {
   done: number;
   failed: number;
   running: boolean;
+  cancelled?: boolean;
   lastError: string | null;
 }
 export interface GradingItem {

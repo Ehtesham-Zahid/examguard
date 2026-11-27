@@ -477,7 +477,7 @@ async function main() {
     await prisma.emailOutbox.updateMany({ where: { dedupeKey: { startsWith: `scheduled:${fut.json.id}:` } }, data: { createdAt: new Date(now - 13 * 3600_000) } });
     await scheduleExamEmails();
     await scheduleExamEmails();
-    ok((await prisma.emailOutbox.count({ where: { kind: 'exam_reminder', dedupeKey: `reminder:${fut.json.id}:${studentId}` } })) === 1, 'scheduler queues one 24h reminder (idempotent across runs)');
+    ok((await prisma.emailOutbox.count({ where: { kind: 'exam_reminder', dedupeKey: { startsWith: `reminder:${fut.json.id}:${studentId}:` } } })) === 1, 'scheduler queues one 24h reminder (idempotent across runs)');
     await scheduleExamEmails();
     ok((await prisma.emailOutbox.count({ where: { kind: 'exam_open', dedupeKey: { startsWith: `open:${live}:` } } })) === (await prisma.enrollment.count({ where: { examId: live } })), '"open" emails from publish and scheduler are not duplicated');
 
@@ -485,7 +485,7 @@ async function main() {
     const s5 = await login('student5@examguard.test');
     ok((await call('PUT', '/auth/prefs', s5, { emailExams: false })).status === 200, 'candidate can turn exam emails off');
     const optExam = await newLiveExam(examiner, 'E3 email optout');
-    const row = await waitFor(() => prisma.emailOutbox.findFirst({ where: { userId: studentId, dedupeKey: `open:${optExam}:${studentId}` } }));
+    const row = await waitFor(() => prisma.emailOutbox.findFirst({ where: { userId: studentId, dedupeKey: { startsWith: `open:${optExam}:${studentId}:` } } }));
     ok(row?.status === 'SKIPPED' && /turned this type/.test(row.lastError ?? ''), 'opted-out email is skipped with a reason');
     await call('PUT', '/auth/prefs', s5, { emailExams: true });
 
@@ -580,7 +580,10 @@ async function main() {
     await call('POST', `/staff/answers/${i1.answerId}/ai-suggest`, examiner, {});
     ok(claudeRequests.length === before + 1, 'repeat request reuses the stored suggestion (no extra API call)');
     await call('POST', `/staff/answers/${i1.answerId}/ai-suggest`, examiner, { force: true });
-    ok(claudeRequests.length === before + 2, 'force=true asks Claude again');
+    ok(claudeRequests.length === before + 1, 'Redo within seconds reuses the fresh suggestion (double-click protection)');
+    await prisma.aiGradeSuggestion.updateMany({ where: { answerId: i1.answerId }, data: { createdAt: new Date(Date.now() - 60_000) } });
+    await call('POST', `/staff/answers/${i1.answerId}/ai-suggest`, examiner, { force: true });
+    ok(claudeRequests.length === before + 2, 'force=true asks Claude again once the suggestion is not brand new');
 
     // (c) manipulation attempts are flagged; contact details are redacted before sending
     const ans3 = await prisma.answer.findUniqueOrThrow({ where: { id: i3.answerId } });
@@ -640,6 +643,38 @@ async function main() {
     ok(cons.similarPairs.some((p: any) => [p.a, p.b].includes(i2.answerId) && [p.a, p.b].includes(i3.answerId)), 'consistency check flags look-alike answers marked far apart');
     ok(cons.disagreements.some((d: any) => d.answerId === i1.answerId) && cons.stats.adjusted >= 1, 'consistency check lists big differences from the AI mark, with agreement stats');
     ok(Array.isArray((await call('GET', `/staff/exams/${gradingExam}/grading`, examiner)).json.groups.flatMap((g: any) => g.items).filter((i: any) => i.ai)), 'grading screen returns stored AI suggestions');
+  }
+
+  // ---------- 17. round-3 audit regressions
+  {
+    // (a) forgot-password: per-account daily cap means the sending quota can't be drained through one account
+    const s7 = await prisma.user.findUniqueOrThrow({ where: { email: 'student7@examguard.test' } });
+    await prisma.passwordToken.createMany({ data: [1, 2, 3].map((i) => ({ userId: s7.id, purpose: 'forgot', tokenHash: `seed-cap-${i}-${Date.now()}`, expiresAt: new Date(Date.now() + 3600_000), createdAt: new Date(Date.now() - 2 * 3600_000) })) });
+    const r = await call('POST', '/auth/password/forgot', undefined, { email: '  Student7@ExamGuard.test ' });
+    ok(r.status === 200 && (await prisma.passwordToken.count({ where: { userId: s7.id, purpose: 'forgot' } })) === 3, 'forgot-password is capped per account per day (same response, no new email)');
+    // (b) many people setting passwords from one IP (an exam hall) are not blocked by each other
+    const resets = await Promise.all(Array.from({ length: 12 }, (_, i) => call('POST', '/auth/password/reset', undefined, { token: `not-a-real-token-${i}-xxxxxxxxxxxx`, password: 'Valid@2026x' })));
+    ok(resets.every((x) => x.status === 400), 'password resets are limited per link, not per shared IP');
+    // (c) moving a published exam re-announces the new time (new dedupe key)
+    const now2 = Date.now();
+    const mv = await call('POST', '/exams', examiner, { title: 'R3 reschedule', instructions: 'x', windowStart: new Date(now2 + 2 * 86400_000).toISOString(), windowEnd: new Date(now2 + 2 * 86400_000 + 3600_000).toISOString(), durationMin: 30, settings: { requireFullscreen: false } });
+    const q3 = ((await call('GET', '/questions', examiner)).json as any[]).filter((q) => q.type === 'SINGLE').slice(0, 2);
+    await call('PUT', `/exams/${mv.json.id}/questions`, examiner, { questionIds: q3.map((q) => q.id) });
+    await call('POST', `/exams/${mv.json.id}/enrollments`, examiner, { candidateIds: [s7.id] });
+    await call('POST', `/exams/${mv.json.id}/publish`, examiner);
+    const full = (await call('GET', `/exams/${mv.json.id}`, examiner)).json;
+    const moved = await call('PUT', `/exams/${mv.json.id}`, examiner, { title: full.title, instructions: full.instructions || 'x', windowStart: new Date(now2 + 4 * 86400_000).toISOString(), windowEnd: new Date(now2 + 4 * 86400_000 + 3600_000).toISOString(), durationMin: full.durationMin });
+    const announced = await waitFor(async () => (await prisma.emailOutbox.count({ where: { kind: 'exam_scheduled', userId: s7.id, dedupeKey: { startsWith: `scheduled:${mv.json.id}:` } } })) >= 2);
+    ok(moved.status === 200 && announced, 'rescheduling a published exam emails the new schedule');
+    // (d) two quick "Suggest for all" clicks start only one paid batch
+    const exams3 = (await call('GET', '/exams', examiner)).json as any[];
+    let target: string | null = null;
+    for (const e of exams3) if ((await call('POST', `/staff/exams/${e.id}/ai/batch`, examiner, { dryRun: true, includeGraded: true, force: true })).json.count > 2) { target = e.id; break; }
+    if (target) {
+      const [b1, b2] = await Promise.all([call('POST', `/staff/exams/${target}/ai/batch`, examiner, { includeGraded: true, force: true }), call('POST', `/staff/exams/${target}/ai/batch`, examiner, { includeGraded: true, force: true })]);
+      ok([b1, b2].filter((b) => b.json.started).length === 1 && [b1, b2].some((b) => b.json.reason === 'already_running'), 'concurrent batch requests start exactly one job');
+      await waitFor(async () => !(await call('GET', `/staff/exams/${target}/ai/status`, examiner)).json.job?.running, 30_000);
+    }
   }
 
   // ---------- 14. audit chain survives everything above

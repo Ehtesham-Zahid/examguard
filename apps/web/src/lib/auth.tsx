@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { api, refreshAccessToken, setAccessToken, setLogoutHandler } from './api';
 import { disconnectSocket } from './socket';
 import type { Prefs, User } from './types';
+import { clearAllLocal } from './outbox';
 import { applyPrefs, localPrefs, saveLocalPrefs, watchSystemTheme } from './theme';
 
 interface AuthCtx {
@@ -63,6 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUserState(null);
     disconnectSocket(); // a shared PC must not reuse the previous user's socket or cached data
     qc.clear();
+    await clearAllLocal(); // and must not keep any exam paper or answers on disk
   };
   const updatePrefs = async (p: Prefs) => {
     const merged = { ...localPrefs(), ...p };

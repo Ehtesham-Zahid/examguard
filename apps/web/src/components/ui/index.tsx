@@ -87,17 +87,19 @@ export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSel
 Select.displayName = 'Select';
 
 export function Toggle({ checked, onChange, label, description, disabled }: { checked: boolean; onChange: (v: boolean) => void; label: string; description?: string; disabled?: boolean }) {
+  const descId = useId();
   return (
     <label className={cx('flex cursor-pointer items-start justify-between gap-4 py-2', disabled && 'opacity-50')}>
       <span>
         <span className="block text-sm font-medium">{label}</span>
-        {description && <span className="block text-xs text-muted">{description}</span>}
+        {description && <span id={descId} className="block text-xs text-muted">{description}</span>}
       </span>
       <button
         type="button"
         role="switch"
         aria-checked={checked}
         aria-label={label}
+        aria-describedby={description ? descId : undefined}
         disabled={disabled}
         onClick={() => onChange(!checked)}
         className={cx('relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition', checked ? 'bg-accent' : 'bg-line-strong')}

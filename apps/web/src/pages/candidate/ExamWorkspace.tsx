@@ -72,9 +72,26 @@ export default function ExamWorkspace() {
   screenRef.current = screen;
   const answersRef = useRef(answers);
   answersRef.current = answers;
+  const dataRef = useRef(data);
+  dataRef.current = data;
+  const discarded = useRef(0); // changes the server refused because they arrived after the time limit
+  /** Keep the offline copy in step with what the server has acknowledged, so an offline reload never shows (or re-sends) stale answers. */
+  const refreshSnapshot = () => {
+    const d = dataRef.current;
+    if (!d) return;
+    const merged: AttemptPayload['answers'] = { ...d.answers };
+    Object.entries(answersRef.current).forEach(([k, v]) => (merged[k] = { ...(merged[k] ?? { clientSeq: 0 }), ...v }));
+    saveSnapshot(attemptId, { ...d, answers: merged });
+  };
   const lastSeqFloor = useRef(0);
   const autoSubmitted = useRef(false);
   const [confirmSubmit, setConfirmSubmit] = useState(false);
+  const [beatNow, setBeatNow] = useState(0);
+  const confirmRef = useRef<HTMLButtonElement>(null);
+  // the hold button that had focus disappears when it turns into "Yes, submit now": move focus to the new button
+  useEffect(() => {
+    if (confirmSubmit) setTimeout(() => confirmRef.current?.focus(), 0);
+  }, [confirmSubmit]);
   const timeUpRef = useRef<() => void>(() => undefined);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const currentRef = useRef(current);
@@ -138,6 +155,7 @@ export default function ExamWorkspace() {
       /* IndexedDB unavailable */
     }
     if (d.attempt.status !== 'IN_PROGRESS') {
+      if (!fromSnapshot) clearAttempt(d.attempt.id);
       setFinish({ status: d.attempt.status, at: Date.now() });
       return setScreen('done');
     }
@@ -170,9 +188,15 @@ export default function ExamWorkspace() {
       });
       await acknowledge(attemptId, r.accepted);
       if (r.rejected.length) {
-        await dropRejected(attemptId, r.rejected.map((x) => x.questionId));
-        if (r.rejected.some((x) => x.reason === 'after_deadline')) toast.error('Some changes arrived after the time limit and were not accepted.');
+        const sentSeq = new Map(items.map((i) => [i.questionId, i.seq]));
+        await dropRejected(attemptId, r.rejected.map((x) => ({ questionId: x.questionId, seq: sentSeq.get(x.questionId) ?? Number.MAX_SAFE_INTEGER })));
+        const late = r.rejected.filter((x) => x.reason === 'after_deadline').length;
+        if (late) {
+          discarded.current += late;
+          toast.error(`${late} change(s) arrived after the time limit and were not accepted.`);
+        }
       }
+      refreshSnapshot();
       setDeadline(new Date(r.deadline).getTime());
       failures.current = 0;
       setNet('online');
@@ -185,6 +209,7 @@ export default function ExamWorkspace() {
       if (e instanceof ApiError) {
         if (e.code === 'SESSION_LOCKED') setScreen('locked');
         else if (e.code === 'TIME_OVER') {
+          discarded.current += items.length;
           await clearAttempt(attemptId);
           setPending(0);
           setSave('saved');
@@ -259,12 +284,14 @@ export default function ExamWorkspace() {
   useEffect(() => {
     if (screen !== 'exam' && screen !== 'gate') return;
     const beat = async () => {
+      // read local state first, so the round-trip used for clock sync is network time only
+      const pendingNow = (await pendingFor(attemptId)).length;
       const t0 = performance.now();
       try {
         const r = await api<{ serverNow: number; status: string; deadline: string; paused: boolean }>(`/candidate/attempts/${attemptId}/heartbeat`, {
           method: 'POST',
           headers: sessionHeaders(),
-          body: { currentQuestion: currentRef.current + 1, answered: Object.values(answersRef.current).filter(isAnswered).length, online: true, pending: (await pendingFor(attemptId)).length },
+          body: { currentQuestion: currentRef.current + 1, answered: Object.values(answersRef.current).filter(isAnswered).length, online: true, pending: pendingNow },
           timeoutMs: 8000,
         });
         syncClock(r.serverNow, performance.now() - t0);
@@ -285,7 +312,7 @@ export default function ExamWorkspace() {
     beat();
     const iv = setInterval(beat, 15000);
     return () => clearInterval(iv);
-  }, [screen, attemptId]);
+  }, [screen, attemptId, beatNow]);
 
   // timer tick (display only — the server enforces the deadline)
   useEffect(() => {
@@ -324,8 +351,9 @@ export default function ExamWorkspace() {
       setLiveMsg('The exam has been paused by the examiner. Your timer is frozen.');
     };
     const onResume = (p: { addedSec: number }) => {
-      setDeadline((d) => d + p.addedSec * 1000);
+      // the server already extended every deadline: fetch the authoritative one instead of adding locally (no double count)
       setPaused(false);
+      setBeatNow((n) => n + 1);
       toast.success(`Exam resumed — ${Math.round(p.addedSec / 60)} min added back to your timer`);
     };
     const onDeadline = (p: { attemptId: string; deadline: string; message: string }) => {
@@ -586,7 +614,7 @@ export default function ExamWorkspace() {
       </FullCenter>
     );
   if (screen === 'locked') return <LockedScreen examId={data?.exam.id} onRetry={load} />;
-  if (screen === 'done' && finish) return <DoneScreen finish={finish} sandbox={sandbox} examId={data?.exam.id} answered={stats.answered} total={questions.length} pending={pending} />;
+  if (screen === 'done' && finish) return <DoneScreen finish={finish} sandbox={sandbox} examId={data?.exam.id} answered={stats.answered} total={questions.length} pending={pending} discarded={discarded.current} />;
 
   const q = questions[current];
   const timeTone = paused ? 'text-warn' : remaining < 60_000 ? 'text-danger' : remaining < 5 * 60_000 ? 'text-warn' : 'text-ink';
@@ -782,9 +810,9 @@ export default function ExamWorkspace() {
         description="Once submitted, you can't change your answers."
         footer={
           <>
-            <Button variant="ghost" onClick={() => setReviewOpen(false)} data-autofocus>Keep working</Button>
+            <Button variant="ghost" onClick={() => { setReviewOpen(false); setConfirmSubmit(false); }} data-autofocus>Keep working</Button>
             {confirmSubmit ? (
-              <Button onClick={() => submit(false)} data-autofocus>
+              <Button ref={confirmRef} onClick={() => submit(false)}>
                 Yes, submit now
               </Button>
             ) : (
@@ -938,10 +966,12 @@ function LockedScreen({ examId, onRetry }: { examId?: string; onRetry: () => voi
   );
 }
 
-function DoneScreen({ finish, sandbox, examId, answered, total, pending }: { finish: { status: string; reason?: string; score?: number; maxScore?: number; at: number }; sandbox: boolean; examId?: string; answered: number; total: number; pending: number }) {
+function DoneScreen({ finish, sandbox, examId, answered, total, pending, discarded }: { finish: { status: string; reason?: string; score?: number; maxScore?: number; at: number }; sandbox: boolean; examId?: string; answered: number; total: number; pending: number; discarded: number }) {
   const pendingSync = finish.status === 'PENDING_SYNC';
   const forced = finish.status === 'FORCE_SUBMITTED';
-  const happy = !pendingSync && !forced;
+  // changes that never made it: refused as late, or still on this device when the attempt was finalised
+  const lost = pendingSync ? 0 : discarded + pending;
+  const happy = !pendingSync && !forced && lost === 0;
   useEffect(() => {
     if (happy) setTimeout(() => confetti(), 350);
   }, [happy]);
@@ -969,6 +999,11 @@ function DoneScreen({ finish, sandbox, examId, answered, total, pending }: { fin
                 : 'Your examiner ended this attempt. Your saved answers were submitted.'
               : `Your answers were received at ${fmtTime(new Date(finish.at))}. ${answered} of ${total} questions answered.`}
         </p>
+        {lost > 0 && (
+          <p role="alert" className="mt-4 rounded-lg border border-warn/30 bg-warn-soft px-3 py-2.5 text-left text-sm text-warn">
+            {lost} change(s) made on this device were not accepted because they reached the server after the time limit. Everything saved before then was submitted.
+          </p>
+        )}
         {sandbox && finish.score !== undefined && (
           <div className="mt-5 rounded-xl bg-info-soft p-4 text-info">
             <div className="text-xs font-semibold uppercase tracking-wide">Sandbox auto-score</div>
@@ -978,7 +1013,7 @@ function DoneScreen({ finish, sandbox, examId, answered, total, pending }: { fin
         )}
         {!sandbox && !pendingSync && <p className="mt-4 text-sm text-muted">Results will appear on your dashboard once your examiner publishes them.</p>}
         <div className="mt-6 flex justify-center gap-2">
-          {sandbox && examId ? <Link to={`/examiner/exams/${examId}`}><Button>Back to exam editor</Button></Link> : <ButtonLink to="/candidate">Back to my exams</ButtonLink>}
+          {sandbox && examId ? <ButtonLink to={`/examiner/exams/${examId}`}>Back to exam editor</ButtonLink> : <ButtonLink to="/candidate">Back to my exams</ButtonLink>}
         </div>
       </div>
     </div>

@@ -71,19 +71,36 @@ export default function Grading() {
   useEffect(() => setActiveQuote(null), [itemKey]);
   const patchItem = (answerId: string, patch: (i: GradingItem) => GradingItem) =>
     qc.setQueriesData<GradingData>({ queryKey: ['grading', id] }, (old) => (old ? { ...old, groups: old.groups.map((g) => ({ ...g, items: g.items.map((i) => (i.answerId === answerId ? patch(i) : i)) })) } : old));
+  // several answers can be waiting on Claude at once: track each one, so a request is never sent twice
+  const [aiPending, setAiPending] = useState<Set<string>>(new Set());
+  const setPendingFor = (answerId: string, on: boolean) =>
+    setAiPending((prev) => {
+      const n = new Set(prev);
+      if (on) n.add(answerId);
+      else n.delete(answerId);
+      return n;
+    });
   const suggest = useMutation({
     mutationFn: (v: { answerId: string; force: boolean }) => api<{ suggestion: AiSuggestion }>(`/staff/answers/${v.answerId}/ai-suggest`, { body: { force: v.force } }),
+    onMutate: (v) => setPendingFor(v.answerId, true),
+    onSettled: (_r, _e, v) => setPendingFor(v.answerId, false),
     onSuccess: (r, v) => {
       patchItem(v.answerId, (i) => ({ ...i, ai: r.suggestion }));
-      if (r.suggestion.status === 'FAILED') toast.error(r.suggestion.error ?? 'No suggestion');
+      if (r.suggestion.status === 'FAILED' && v.answerId === itemRef.current?.answerId) toast.error(r.suggestion.error ?? 'No suggestion');
     },
     onError: (e) => toast.error(errMsg(e)),
   });
-  const aiLoading = suggest.isPending && suggest.variables?.answerId === item?.answerId;
+  const itemRef = useRef(item);
+  itemRef.current = item;
+  const aiLoading = !!item?.answerId && aiPending.has(item.answerId);
   const requestAi = (force = false) => item?.answerId && item.text.trim() && aiEnabled && !aiLoading && suggest.mutate({ answerId: item.answerId, force });
   const acceptAi = () => {
     const s = item?.ai;
     if (!s || s.status !== 'READY' || s.score == null) return;
+    if (s.stale) {
+      toast.warning('This suggestion is out of date', { description: 'The answer or rubric changed since. Press S or "Redo" for a fresh one.' });
+      return;
+    }
     setScore(String(s.score));
     if (!feedback.trim() && s.feedback) setFeedback(s.feedback);
     scoreRef.current?.focus();
@@ -100,33 +117,46 @@ export default function Grading() {
     queryKey: ['ai-status', id],
     queryFn: () => api<{ job: AiJob | null }>(`/staff/exams/${id}/ai/status`),
     enabled: aiEnabled && (watching || !!job?.running),
-    refetchInterval: (qq) => (qq.state.data?.job?.running === false ? false : 1500),
+    refetchInterval: (qq) => (qq.state.data && !qq.state.data.job?.running ? false : 1500),
   });
   const liveJob = status.data?.job ?? job;
   const lastDone = useRef(-1);
   useEffect(() => {
     const j = status.data?.job;
-    if (!j) return;
+    if (!j) {
+      // the server no longer knows the job (e.g. it restarted): stop watching
+      if (status.data && watching) setWatching(false);
+      return;
+    }
     if (j.done !== lastDone.current) {
       lastDone.current = j.done;
       qc.invalidateQueries({ queryKey: ['grading', id] });
     }
     if (!j.running && watching) {
       setWatching(false);
-      if (j.total) (j.failed ? toast.warning : toast.success)(`AI suggestions ready for ${j.done - j.failed} answer(s)${j.failed ? ` · ${j.failed} failed` : ''}`, j.failed && j.lastError ? { description: j.lastError } : undefined);
+      if (j.total)
+        (j.failed || j.cancelled ? toast.warning : toast.success)(
+          `${j.cancelled ? `Stopped after ${j.done} of ${j.total}` : 'AI suggestions ready'} — ${j.done - j.failed} answer(s) have a suggestion${j.failed ? ` · ${j.failed} failed` : ''}`,
+          j.failed && j.lastError ? { description: j.lastError } : undefined,
+        );
       qc.invalidateQueries({ queryKey: ['grading', id] });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status.data?.job?.done, status.data?.job?.running, status.dataUpdatedAt]);
   const countBatch = useMutation({
     mutationFn: () => api<{ count: number; max: number }>(`/staff/exams/${id}/ai/batch`, { body: { questionId: group?.questionId, dryRun: true } }),
-    onSuccess: (r) => (r.count ? setBatchAsk({ count: r.count }) : toast.info('Every non-blank answer to this question already has an AI suggestion')),
+    onSuccess: (r) => (r.count ? setBatchAsk({ count: r.count }) : toast.info('No ungraded answers to this question need a suggestion')),
     onError: (e) => toast.error(errMsg(e)),
   });
   const startBatch = useMutation({
-    mutationFn: () => api<{ started: boolean; queued?: number }>(`/staff/exams/${id}/ai/batch`, { body: { questionId: group?.questionId } }),
-    onSuccess: () => {
+    mutationFn: () => api<{ started: boolean; queued?: number; reason?: string }>(`/staff/exams/${id}/ai/batch`, { body: { questionId: group?.questionId } }),
+    onSuccess: (r) => {
       setBatchAsk(null);
+      if (!r.started) {
+        toast.info(r.reason === 'already_running' ? 'A batch is already running for this exam — wait for it to finish' : 'Nothing left to suggest for this question');
+        qc.invalidateQueries({ queryKey: ['ai-status', id] });
+        return;
+      }
       lastDone.current = -1;
       setWatching(true);
       qc.invalidateQueries({ queryKey: ['grading', id] });
@@ -134,7 +164,7 @@ export default function Grading() {
     },
     onError: (e) => toast.error(errMsg(e)),
   });
-  const cancelBatch = useMutation({ mutationFn: () => api(`/staff/exams/${id}/ai/cancel`, { method: 'POST' }), onSuccess: () => qc.invalidateQueries({ queryKey: ['ai-status', id] }) });
+  const cancelBatch = useMutation({ mutationFn: () => api(`/staff/exams/${id}/ai/cancel`, { method: 'POST' }), onSuccess: () => qc.invalidateQueries({ queryKey: ['ai-status', id] }), onError: (e) => toast.error(errMsg(e)) });
 
   // consistency check
   const [checkOpen, setCheckOpen] = useState(false);
@@ -182,6 +212,7 @@ export default function Grading() {
     else toast.success('Every answer is graded');
   };
 
+  const savingRef = useRef(false);
   const save = useMutation({
     mutationFn: (v: { answerId: string; score: number; feedback: string }) =>
       api<{ attemptScore: number; gradingStatus: string; aiDecision: 'ACCEPTED' | 'ADJUSTED' | null }>(`/staff/answers/${v.answerId}/grade`, { method: 'PUT', body: { score: v.score, feedback: v.feedback || undefined, reason: published ? reason.trim() : undefined } }),
@@ -205,19 +236,22 @@ export default function Grading() {
       qc.invalidateQueries({ queryKey: ['analytics'] });
       qc.invalidateQueries({ queryKey: ['attempt'] });
       toast.success(`Saved ${v.score}/${item?.marks}`, { duration: 1500 });
-      next();
+      // advance from the answer that was saved (not wherever the examiner navigated meanwhile)
+      if (itemRef.current?.answerId === v.answerId) next();
     },
     onError: (e) => toast.error(errMsg(e)),
   });
 
   const submit = () => {
     setTouched(true);
-    if (!item?.answerId) return;
+    // a held/double Enter must not save twice (a ref, because React state lags behind same-tick key repeats)
+    if (!item?.answerId || savingRef.current) return;
     if (scoreErr || reasonErr) {
       scoreRef.current?.focus();
       return;
     }
-    save.mutate({ answerId: item.answerId, score: Number(score), feedback: feedback.trim() });
+    savingRef.current = true;
+    save.mutate({ answerId: item.answerId, score: Number(score), feedback: feedback.trim() }, { onSettled: () => (savingRef.current = false) });
   };
 
   useHotkeys({ j: next, k: prev, n: nextUngraded, Enter: (e) => !(e.target as HTMLElement).closest('button,a') && submit(), '0': () => item && setScore('0'), h: () => item && setScore(String(Math.round((item.marks / 2) * 100) / 100)), f: () => item && setScore(String(item.marks)), a: acceptAi, s: () => requestAi(false) });
@@ -323,7 +357,12 @@ export default function Grading() {
               <RichText text={group.body} className="exam-text text-ink" />
               {aiEnabled && (
                 <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-dashed border-line-strong px-3.5 py-2.5">
-                  {liveJob?.running ? (
+                  {liveJob?.running && liveJob.questionId && liveJob.questionId !== group.questionId ? (
+                    <p className="min-w-0 flex-1 text-[13px] text-ink-2">
+                      <Sparkles className="mr-1.5 inline size-4 animate-pulse align-[-3px]" aria-hidden />
+                      Claude is suggesting marks for Question {groups.findIndex((g) => g.questionId === liveJob.questionId) + 1} ({liveJob.done}/{liveJob.total}).
+                    </p>
+                  ) : liveJob?.running ? (
                     <>
                       <Sparkles className="size-4 animate-pulse text-ink" aria-hidden />
                       <div className="min-w-[160px] flex-1">
@@ -335,7 +374,7 @@ export default function Grading() {
                         </div>
                         <ProgressBar value={liveJob.done} max={liveJob.total} className="h-1.5" label="AI suggestions progress" />
                       </div>
-                      <Button size="sm" variant="ghost" icon={<Square className="size-3.5" />} onClick={() => cancelBatch.mutate()}>
+                      <Button size="sm" variant="ghost" icon={<Square className="size-3.5" />} loading={cancelBatch.isPending} onClick={() => cancelBatch.mutate()}>
                         Stop
                       </Button>
                     </>

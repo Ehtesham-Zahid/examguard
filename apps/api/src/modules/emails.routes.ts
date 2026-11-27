@@ -8,7 +8,7 @@ import { badRequest, conflict, notFound } from '../core/errors.js';
 import { param, parseBody, parseQuery } from '../core/validate.js';
 import { audit } from '../core/audit.js';
 import { config, emailConfigured, emailMode } from '../core/config.js';
-import { fromAddress, isReservedAddress, kick, queueEmails, renderRow, verifyTransport } from '../services/email/outbox.js';
+import { fromAddress, isReservedAddress, kick, queueEmails, renderRowForPreview, verifyTransport } from '../services/email/outbox.js';
 
 export const emailsRouter = Router();
 emailsRouter.use(authenticate, requireRole('ADMIN'));
@@ -18,11 +18,11 @@ const TOKEN_KINDS = ['welcome', 'password_reset', 'password_forgot'];
 
 emailsRouter.get('/', async (req, res) => {
   const q = parseQuery(
-    z.object({ status: z.enum(STATUSES).optional(), category: z.enum(['exams', 'results', 'disputes', 'account']).optional(), q: z.string().trim().max(120).optional(), page: z.coerce.number().int().min(1).default(1), pageSize: z.coerce.number().int().min(5).max(100).default(25) }),
+    z.object({ status: z.preprocess((v) => (typeof v === 'string' && v ? v.split(',') : undefined), z.array(z.enum(STATUSES)).optional()), category: z.enum(['exams', 'results', 'disputes', 'account']).optional(), q: z.string().trim().max(120).optional(), page: z.coerce.number().int().min(1).default(1), pageSize: z.coerce.number().int().min(5).max(100).default(25) }),
     req,
   );
   const where: Prisma.EmailOutboxWhereInput = {
-    ...(q.status ? { status: q.status } : {}),
+    ...(q.status?.length ? { status: { in: q.status } } : {}),
     ...(q.category ? { category: q.category } : {}),
     ...(q.q ? { OR: [{ to: { contains: q.q, mode: 'insensitive' } }, { subject: { contains: q.q, mode: 'insensitive' } }] } : {}),
   };
@@ -48,7 +48,7 @@ emailsRouter.get('/status', async (_req, res) => {
 emailsRouter.get('/:id', async (req, res) => {
   const row = await prisma.emailOutbox.findUnique({ where: { id: param(req, 'id') }, include: { user: { select: { name: true, role: true } } } });
   if (!row) throw notFound();
-  const r = renderRow(row);
+  const r = renderRowForPreview(row);
   res.json({ ...row, data: undefined, html: r.html, text: r.text, hasCalendarInvite: row.kind === 'exam_scheduled' || row.kind === 'exam_reminder', linkRedacted: TOKEN_KINDS.includes(row.kind) && !(row.data as { token?: string })?.token });
 });
 

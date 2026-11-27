@@ -43,8 +43,8 @@ export const aiConfig = {
   apiKey: (process.env.ANTHROPIC_API_KEY ?? '').trim(),
   model: (process.env.AI_GRADING_MODEL ?? '').trim() || 'claude-opus-5-5',
   effort: (['low', 'medium', 'high', 'xhigh', 'max'].includes(process.env.AI_GRADING_EFFORT ?? '') ? process.env.AI_GRADING_EFFORT : 'medium') as 'low' | 'medium' | 'high' | 'xhigh' | 'max',
-  maxBatch: Number(process.env.AI_GRADING_MAX_BATCH ?? 300),
-  concurrency: Math.max(1, Math.min(8, Number(process.env.AI_GRADING_CONCURRENCY ?? 3))),
+  maxBatch: Math.max(1, Number(process.env.AI_GRADING_MAX_BATCH) || 300),
+  concurrency: Math.max(1, Math.min(8, Number(process.env.AI_GRADING_CONCURRENCY) || 3)),
 };
 export const aiEnabled = () => aiConfig.apiKey.length > 0;
 

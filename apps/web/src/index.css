@@ -152,6 +152,14 @@ body {
   background: var(--hl);
   color: var(--hl-ink);
 }
+/* Grids without explicit columns (phones, before an lg:grid-cols-* kicks in) get one *shrinkable* column.
+   The default implicit 'auto' track grows to the widest unbreakable child (long titles, tables) and
+   pushes the page wider than the screen. grid-cols-* utilities (higher layer) still override this. */
+@layer base {
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 @layer base {
   :focus-visible {
     outline: 2px solid var(--focus);
