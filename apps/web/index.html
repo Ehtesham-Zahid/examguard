@@ -46,35 +46,8 @@
       @media (max-width:640px){#splash .word{font-size:46px}#splash .brand svg{width:56px;height:56px}#splash .card{padding:34px 30px 28px}#splash .margin{left:24px}#splash .bar{width:180px}}
       @media (prefers-reduced-motion:reduce){#splash *{animation-duration:.01ms!important;animation-iteration-count:1!important}#splash .track{animation:none}#splash{transition:opacity .3s}html.splash-out #splash{transform:none;opacity:0}}
     </style>
-    <script>
-      (function () {
-        var start = performance.now();
-        try {
-          if (location.pathname.indexOf('/exam/') === 0) return; // never delay a candidate reloading a running exam
-          if (sessionStorage.getItem('ex_splash')) return; // later loads keep the small inline loader
-          sessionStorage.setItem('ex_splash', '1');
-        } catch (e) {}
-        document.documentElement.classList.add('splash-on');
-        window.__hideSplash = function () {
-          var root = document.documentElement;
-          if (!root.classList.contains('splash-on') || root.classList.contains('splash-out')) return;
-          var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
-          var wait = Math.max(0, (reduce ? 500 : 1900) - (performance.now() - start));
-          setTimeout(function () {
-            root.classList.add('splash-done');
-            setTimeout(function () {
-              root.classList.add('splash-out');
-              setTimeout(function () {
-                var el = document.getElementById('splash');
-                if (el) el.remove();
-                root.classList.remove('splash-on', 'splash-out', 'splash-done');
-              }, 800);
-            }, 260);
-          }, wait);
-        };
-        setTimeout(function () { window.__hideSplash && window.__hideSplash(); }, 6000); // safety net if the app never reports in
-      })();
-    </script>
+    <!-- classic (blocking) script so the loader decision happens before first paint; served from 'self' for the CSP -->
+    <script src="/splash.js"></script>
   </head>
   <body>
     <div id="splash" role="status" aria-label="Loading Examify">
