@@ -45,20 +45,20 @@ export function HeroMock() {
         {/* window bar */}
         <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
           <div className="min-w-0">
-            <div className="display truncate text-[15px] font-bold">DSA Midterm</div>
-            <div className="text-[11px] text-muted">Question 7 of 12 · 4 marks</div>
+            <div className="display truncate text-[16px] font-bold">DSA Midterm</div>
+            <div className="text-[12px] text-muted">Question 7 of 12 · 4 marks</div>
           </div>
           <div className="flex items-center gap-2">
             <span
               className={cx(
-                'inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold transition-colors',
+                'inline-flex items-center gap-1 rounded-full px-2 py-1 text-[12px] font-semibold transition-colors',
                 net === 'online' ? 'bg-ok-soft text-ok' : net === 'offline' ? 'bg-warn-soft text-warn' : 'bg-info-soft text-info',
               )}
             >
               {net === 'online' ? <CheckCircle2 className="size-3" /> : net === 'offline' ? <CloudOff className="size-3" /> : <Loader2 className="size-3 animate-spin" />}
               {net === 'online' ? 'Saved' : net === 'offline' ? `Offline · ${queued} queued` : 'Syncing…'}
             </span>
-            <span className="flex items-center gap-1 rounded-lg border border-line px-2 py-1 font-mono text-[15px] font-semibold" aria-label={`Timer ${mm}:${ss}`}>
+            <span className="flex items-center gap-1 rounded-lg border border-line px-2 py-1 font-mono text-[16px] font-semibold" aria-label={`Timer ${mm}:${ss}`}>
               <span className="size-1.5 rounded-full bg-ok pulse-dot" />
               <Counter value={mm} minDigits={2} fontSize={15} fontWeight={600} textColor="var(--ink)" tabular padding={0} />
               :
@@ -68,15 +68,15 @@ export function HeroMock() {
         </div>
         <div className="grid grid-cols-[1fr_96px] sm:grid-cols-[1fr_118px]">
           <div className="margin-line relative py-4 pl-9 pr-4 [&::before]:left-4">
-            <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">Single choice</div>
-            <p className="mt-1.5 text-[14px] leading-snug">Worst-case time to search a balanced binary search tree?</p>
+            <div className="font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Single choice</div>
+            <p className="mt-1.5 text-[15px] leading-snug">Worst-case time to search a balanced binary search tree?</p>
             <div className="mt-3 space-y-1.5">
               {OPTIONS.map((o, i) => (
                 <div
                   key={o + (i === sel ? '-on' : '')}
-                  className={cx('flex items-center gap-2 rounded-lg border-[1.5px] px-2.5 py-1.5 text-[13px] transition-colors', i === sel ? 'hl-answer border-ink' : 'border-line')}
+                  className={cx('flex items-center gap-2 rounded-lg border-[1.5px] px-2.5 py-1.5 text-[14px] transition-colors', i === sel ? 'hl-answer border-ink' : 'border-line')}
                 >
-                  <span className={cx('grid size-5 shrink-0 place-items-center rounded-full border-[1.5px] font-mono text-[10px] font-bold', i === sel ? 'pop border-ink bg-ink text-surface' : 'border-line-strong text-muted')}>
+                  <span className={cx('grid size-5 shrink-0 place-items-center rounded-full border-[1.5px] font-mono text-[11px] font-bold', i === sel ? 'pop border-ink bg-ink text-surface' : 'border-line-strong text-muted')}>
                     {i === sel ? <Check className="size-3" strokeWidth={3} /> : String.fromCharCode(65 + i)}
                   </span>
                   <span className="font-mono">{o}</span>
@@ -85,13 +85,13 @@ export function HeroMock() {
             </div>
           </div>
           <div className="border-l border-line p-2.5">
-            <div className="mb-1.5 font-mono text-[9px] font-semibold uppercase tracking-wider text-muted">Navigator</div>
+            <div className="mb-1.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-muted">Navigator</div>
             <div className="grid grid-cols-3 gap-1">
               {Array.from({ length: 12 }, (_, i) => (
                 <span
                   key={i + (i < answered ? 'a' : 'b')}
                   className={cx(
-                    'grid aspect-square place-items-center rounded-md border-[1.5px] font-mono text-[9px] font-semibold',
+                    'grid aspect-square place-items-center rounded-md border-[1.5px] font-mono text-[10px] font-semibold',
                     i < answered ? 'pop border-ink bg-ink text-surface' : 'border-line text-muted',
                     i === 6 && 'ring-2 ring-margin ring-offset-1 ring-offset-[var(--surface)]',
                     i === 3 && i >= answered && 'border-dashed border-margin',
@@ -105,10 +105,10 @@ export function HeroMock() {
         </div>
       </div>
       {/* sticky notes */}
-      <div className="sticky-note absolute -bottom-7 -left-5 hidden w-44 rounded-md bg-hl p-3 text-[12px] font-semibold leading-snug text-hl-ink shadow-[0_8px_18px_-8px_rgb(23_42_70/0.45)] sm:block" style={{ ['--r' as string]: '-5deg', ['--d' as string]: '0.9s' }}>
+      <div className="sticky-note absolute -bottom-7 -left-5 hidden w-44 rounded-md bg-hl p-3 text-[13px] font-semibold leading-snug text-hl-ink shadow-[0_8px_18px_-8px_rgb(23_42_70/0.45)] sm:block" style={{ ['--r' as string]: '-5deg', ['--d' as string]: '0.9s' }}>
         Wi-Fi dropped? Keep going. Answers are saved on this device ✓
       </div>
-      <div className="sticky-note absolute -right-4 -top-6 hidden rounded-md border-2 border-ink bg-surface px-3 py-2 font-mono text-[11px] font-bold text-ink shadow-[3px_3px_0_var(--ink)] sm:block" style={{ ['--r' as string]: '6deg', ['--d' as string]: '1.2s' }}>
+      <div className="sticky-note absolute -right-4 -top-6 hidden rounded-md border-2 border-ink bg-surface px-3 py-2 font-mono text-[12px] font-bold text-ink shadow-[3px_3px_0_var(--ink)] sm:block" style={{ ['--r' as string]: '6deg', ['--d' as string]: '1.2s' }}>
         timer = server clock ⏱
       </div>
     </div>
@@ -144,7 +144,7 @@ export function OfflineDemo() {
     <div className="rounded-2xl border-2 border-ink bg-surface p-5 shadow-[6px_6px_0_var(--ink)] sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">Try it</div>
+          <div className="font-mono text-[12px] font-semibold uppercase tracking-[0.14em] text-muted">Try it</div>
           <div className="display text-xl font-bold">Pull the plug</div>
         </div>
         <button
@@ -161,7 +161,7 @@ export function OfflineDemo() {
           </span>
         </button>
       </div>
-      <div className={cx('mt-4 flex items-center gap-2 rounded-lg px-3 py-2 text-[13px] font-semibold transition-colors', online ? (queuedCount ? 'bg-info-soft text-info' : 'bg-ok-soft text-ok') : 'bg-warn-soft text-warn')} role="status" aria-live="polite">
+      <div className={cx('mt-4 flex items-center gap-2 rounded-lg px-3 py-2 text-[14px] font-semibold transition-colors', online ? (queuedCount ? 'bg-info-soft text-info' : 'bg-ok-soft text-ok') : 'bg-warn-soft text-warn')} role="status" aria-live="polite">
         {online ? queuedCount ? <Loader2 className="size-4 animate-spin" /> : <Cloud className="size-4" /> : <CloudOff className="size-4" />}
         {online ? (queuedCount ? `Back online, syncing ${queuedCount} answer(s)…` : 'All answers are on the server') : `Offline: ${queuedCount} answer(s) safe on this device`}
       </div>
@@ -194,7 +194,7 @@ export function OfflineDemo() {
           Reset
         </button>
       </div>
-      <p className="mt-3 text-[12px] text-muted">Answers written offline are accepted only if they were made before the deadline, so nobody gains extra time.</p>
+      <p className="mt-3 text-[13px] text-muted">Answers written offline are accepted only if they were made before the deadline, so nobody gains extra time.</p>
     </div>
   );
 }
@@ -214,12 +214,12 @@ export function FairnessPlot() {
   const x = (v: number) => `${Math.min(98, Math.max(2, ((v - 38) / 24) * 100))}%`;
   return (
     <div ref={ref} className="rounded-2xl border-2 border-ink bg-surface p-5 shadow-[6px_6px_0_var(--ink)] sm:p-6">
-      <div className="font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">Expected score of 40 randomised papers</div>
+      <div className="font-mono text-[12px] font-semibold uppercase tracking-[0.14em] text-muted">Expected score of 40 randomised papers</div>
       {(['naive', 'fair'] as const).map((k) => (
         <div key={k} className="mt-5">
           <div className="mb-2 flex items-baseline justify-between text-sm">
             <span className="font-semibold">{k === 'naive' ? 'Picked at random' : 'Balanced by ExamGuard'}</span>
-            <span className={cx('font-mono text-[13px] font-bold', k === 'naive' ? 'text-danger' : 'text-ok')}>{k === 'naive' ? '±3.4 pts' : '±0.1 pts'}</span>
+            <span className={cx('font-mono text-[14px] font-bold', k === 'naive' ? 'text-danger' : 'text-ok')}>{k === 'naive' ? '±3.4 pts' : '±0.1 pts'}</span>
           </div>
           <div className="paper-grid relative h-14 overflow-hidden rounded-lg border border-line">
             <span className="absolute inset-y-0 left-1/2 w-[2px] -translate-x-1/2 bg-margin/70" aria-hidden />
@@ -233,7 +233,7 @@ export function FairnessPlot() {
           </div>
         </div>
       ))}
-      <div className="mt-3 flex justify-between font-mono text-[10px] text-muted">
+      <div className="mt-3 flex justify-between font-mono text-[11px] text-muted">
         <span>easier paper</span>
         <span className="text-margin">target</span>
         <span>harder paper</span>

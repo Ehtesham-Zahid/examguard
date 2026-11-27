@@ -43,13 +43,13 @@ export function useInView<T extends HTMLElement>() {
 
 export function SectionHead({ eyebrow, title, sub, center }: { eyebrow: string; title: ReactNode; sub?: ReactNode; center?: boolean }) {
   return (
-    <Reveal className={cx('mb-12 max-w-2xl', center && 'mx-auto text-center')}>
-      <div className={cx('mb-3 flex items-center gap-2 font-mono text-[12px] font-semibold uppercase tracking-[0.16em] text-ink-2', center && 'justify-center')}>
+    <Reveal className={cx('mb-14 max-w-3xl', center && 'mx-auto text-center')}>
+      <div className={cx('mb-3 flex items-center gap-2 font-mono text-[13px] font-semibold uppercase tracking-[0.16em] text-ink-2', center && 'justify-center')}>
         <span className="h-[2px] w-6 rounded bg-margin" aria-hidden />
         {eyebrow}
       </div>
-      <h2 className="display text-[34px] font-bold leading-[1.08] sm:text-[44px]">{title}</h2>
-      {sub && <p className="mt-4 text-[17px] leading-relaxed text-ink-2">{sub}</p>}
+      <h2 className="display text-[40px] font-bold leading-[1.08] sm:text-[56px]">{title}</h2>
+      {sub && <p className="mt-4 text-[19px] leading-relaxed text-ink-2">{sub}</p>}
     </Reveal>
   );
 }

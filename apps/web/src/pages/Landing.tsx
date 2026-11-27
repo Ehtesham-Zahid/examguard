@@ -69,7 +69,7 @@ function PrimaryCta({ to, children }: { to: string; children: ReactNode }) {
     <Magnet padding={60} magnetStrength={4} maxOffset={14}>
       <Link
         to={to}
-        className="group inline-flex h-12 items-center gap-2 rounded-xl bg-accent px-6 text-[15px] font-bold text-accent-ink shadow-[0_3px_0_rgb(0_0_0/0.25)] transition-all hover:-translate-y-0.5 hover:shadow-[0_6px_0_rgb(0_0_0/0.22)] active:translate-y-0 active:scale-[0.98]"
+        className="group inline-flex h-14 items-center gap-2 rounded-xl bg-accent px-7 text-[17px] font-bold text-accent-ink shadow-[0_3px_0_rgb(0_0_0/0.25)] transition-all hover:-translate-y-0.5 hover:shadow-[0_6px_0_rgb(0_0_0/0.22)] active:translate-y-0 active:scale-[0.98]"
       >
         {children}
         <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
@@ -97,7 +97,7 @@ function Nav() {
   ];
   return (
     <header className={cx('fixed inset-x-0 top-0 z-40 transition-all duration-300', scrolled ? 'border-b border-line bg-surface/90 shadow-[var(--shadow)] backdrop-blur' : 'bg-transparent')}>
-      <nav className="mx-auto flex h-16 max-w-6xl items-center gap-6 px-4 sm:px-6" aria-label="Main">
+      <nav className="mx-auto flex h-16 max-w-[1440px] items-center gap-6 px-5 sm:px-8 lg:px-10" aria-label="Main">
         <Link to="/" aria-label="ExamGuard home">
           <Logo />
         </Link>
@@ -154,28 +154,28 @@ function Hero() {
     <section className="relative overflow-hidden pb-20 pt-28 sm:pt-32">
       <CursorGrid className="!absolute inset-0" cellSize={28} color="#F7E64A" gridColor={dark ? '#1C3050' : '#E3EFF9'} gridOpacity={1} radius={90} maxOpacity={0.75} fillOpacity={0.45} falloff="smooth" holdTime={250} fadeDuration={800} lightMode={!dark} edgeFade={0.15} />
       <div aria-hidden className="pointer-events-none absolute inset-y-0 left-3 w-[1.5px] bg-margin/50 sm:left-6" />
-      <div className="pointer-events-none relative mx-auto grid max-w-6xl items-center gap-14 pl-8 pr-6 sm:pl-14 sm:pr-10 lg:grid-cols-[1.05fr_1fr]">
+      <div className="pointer-events-none relative mx-auto grid max-w-[1440px] items-center gap-14 pl-8 pr-5 sm:pl-12 sm:pr-8 lg:pr-10 lg:grid-cols-[1.05fr_1fr]">
         <div className="pointer-events-auto">
-          <div className="page-enter mb-5 inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3 py-1.5 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-2 shadow-[var(--shadow)]">
+          <div className="page-enter mb-5 inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3 py-1.5 font-mono text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-2 shadow-[var(--shadow)]">
             <span className="size-1.5 rounded-full bg-ok pulse-dot" /> Secure examination management
           </div>
-          <h1 className="display text-[44px] font-bold leading-[1.02] sm:text-[62px]">
+          <h1 className="display text-[42px] font-bold leading-[1.02] sm:text-[60px] lg:text-[60px] xl:text-[78px] 2xl:text-[88px]">
             Exams that are fair, secure and <span className="hl-swipe">survive a power cut.</span>
           </h1>
-          <p className="page-enter mt-6 max-w-xl text-[18px] leading-relaxed text-ink-2" style={{ animationDelay: '0.15s' }}>
+          <p className="page-enter mt-6 max-w-xl text-[21px] leading-relaxed text-ink-2" style={{ animationDelay: '0.15s' }}>
             Create, run, monitor and grade online exams in one place. ExamGuard keeps working through dropped connections, makes every random paper equally hard, and uses no webcam.
           </p>
           <div className="page-enter mt-8 flex flex-wrap items-center gap-3" style={{ animationDelay: '0.25s' }}>
             <PrimaryCta to={user ? HOME[user.role] : '/login'}>{user ? 'Open your dashboard' : 'Try the live demo'}</PrimaryCta>
-            <a href="#resilience" className="inline-flex h-12 items-center gap-2 rounded-xl border-2 border-ink bg-surface px-5 text-[15px] font-bold transition-all hover:-translate-y-0.5 hover:bg-hl hover:text-hl-ink">
+            <a href="#resilience" className="inline-flex h-14 items-center gap-2 rounded-xl border-2 border-ink bg-surface px-5 text-[17px] font-bold transition-all hover:-translate-y-0.5 hover:bg-hl hover:text-hl-ink">
               <CloudOff className="size-4" /> See it go offline
             </a>
           </div>
-          <div className="page-enter mt-8 flex flex-wrap items-center gap-x-5 gap-y-2 text-[14px] font-semibold text-ink-2" style={{ animationDelay: '0.35s' }}>
+          <div className="page-enter mt-8 flex flex-wrap items-center gap-x-5 gap-y-2 text-[16px] font-semibold text-ink-2" style={{ animationDelay: '0.35s' }}>
             <span>Built for</span>
             <RotatingText
               texts={['universities', 'schools', 'hackathons', 'certification bodies', 'coding bootcamps']}
-              mainClassName="inline-flex overflow-hidden rounded-md bg-ink px-2 py-0.5 font-mono text-[13px] text-surface"
+              mainClassName="inline-flex overflow-hidden rounded-md bg-ink px-2 py-0.5 font-mono text-[15px] text-surface"
               staggerFrom="first"
               staggerDuration={0.02}
               rotationInterval={2200}
@@ -184,7 +184,7 @@ function Hero() {
             />
           </div>
         </div>
-        <div className="page-enter pointer-events-auto lg:pl-6" style={{ animationDelay: '0.2s' }}>
+        <div className="page-enter pointer-events-auto lg:pl-6 xl:[zoom:1.12] 2xl:[zoom:1.2]" style={{ animationDelay: "0.2s" }}>
           <HeroMock />
         </div>
       </div>
@@ -198,7 +198,7 @@ function Marquee() {
       <LogoLoop
         logos={MARQUEE.map(([Icon, label]) => ({
           node: (
-            <span className="inline-flex items-center gap-2 whitespace-nowrap font-mono text-[14px] font-bold uppercase tracking-wide">
+            <span className="inline-flex items-center gap-2 whitespace-nowrap font-mono text-[16px] font-bold uppercase tracking-wide">
               <Icon className="size-4" /> {label} <span className="ml-3 text-margin">✦</span>
             </span>
           ),
@@ -223,15 +223,15 @@ function Stats() {
     [0, '', 'webcams, microphones or screen recordings'],
   ];
   return (
-    <section className="mx-auto max-w-6xl px-6 py-16 sm:px-10">
+    <section className="mx-auto max-w-[1440px] px-5 py-16 sm:px-8 lg:px-10">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {items.map(([n, suf, label], i) => (
           <Reveal key={label} delay={i * 0.08} className="lift rounded-2xl border border-line bg-surface p-6 shadow-[var(--shadow)]">
-            <div className="display text-[46px] font-bold leading-none">
+            <div className="display text-[54px] font-bold leading-none">
               <CountUp to={n} duration={1.4} trigger="view" />
               <span className="text-muted">{suf}</span>
             </div>
-            <div className="mt-2 text-[14px] text-ink-2">{label}</div>
+            <div className="mt-2 text-[16px] text-ink-2">{label}</div>
           </Reveal>
         ))}
       </div>
@@ -284,7 +284,7 @@ const FEATURE_GROUPS: { title: string; tag: string; icon: typeof FileQuestion; i
 
 function Features() {
   return (
-    <section id="features" className="scroll-mt-20 mx-auto max-w-6xl px-6 py-20 sm:px-10">
+    <section id="features" className="scroll-mt-20 mx-auto max-w-[1440px] px-5 py-20 sm:px-8 lg:px-10">
       <SectionHead eyebrow="Everything in one notebook" title={<>The whole exam, from <span className="hl">first question</span> to signed result.</>} sub="Built for administrators, examiners and candidates, with the parts that usually break (bad Wi-Fi, unfair papers, disputed marks) designed in from day one." />
       <div className="grid gap-5 md:grid-cols-2">
         {FEATURE_GROUPS.map((g, gi) => (
@@ -298,7 +298,7 @@ function Features() {
                   {g.title}
                 </span>
               </h3>
-              <span className="ml-auto rounded-full bg-surface-2 px-2.5 py-1 font-mono text-[11px] font-semibold text-ink-2">{g.tag}</span>
+              <span className="ml-auto rounded-full bg-surface-2 px-2.5 py-1 font-mono text-[12px] font-semibold text-ink-2">{g.tag}</span>
             </div>
             <ul className="space-y-4">
               {g.items.map(([Icon, t, d]) => (
@@ -306,7 +306,7 @@ function Features() {
                   <Icon className="mt-0.5 size-5 shrink-0 text-margin" />
                   <div>
                     <div className="font-bold">{t}</div>
-                    <div className="text-[14px] leading-relaxed text-ink-2">{d}</div>
+                    <div className="text-[16px] leading-relaxed text-ink-2">{d}</div>
                   </div>
                 </li>
               ))}
@@ -321,10 +321,10 @@ function Features() {
 function Resilience() {
   return (
     <section id="resilience" className="scroll-mt-20 border-y border-line bg-surface">
-      <div className="mx-auto grid max-w-6xl items-center gap-12 px-6 py-20 sm:px-10 lg:grid-cols-2">
+      <div className="mx-auto grid max-w-[1440px] items-center gap-12 px-5 py-20 sm:px-8 lg:px-10 lg:grid-cols-2">
         <div>
           <SectionHead eyebrow="Failure-resilient" title={<>Wi-Fi drops. Laptops die. <span className="hl">Nobody loses marks.</span></>} />
-          <Reveal className="-mt-6 space-y-4 text-[16px] leading-relaxed text-ink-2">
+          <Reveal className="-mt-6 space-y-4 text-[18px] leading-relaxed text-ink-2">
             <p>Every answer is written to the candidate's device before it goes to the network, so a dropped connection or a refresh never loses work.</p>
             <p>The timer runs on the server. Answers written offline are accepted only if they were made before the deadline, so nobody gains extra time.</p>
             <p>
@@ -342,13 +342,13 @@ function Resilience() {
 
 function Fairness() {
   return (
-    <section id="fairness" className="scroll-mt-20 mx-auto grid max-w-6xl items-center gap-12 px-6 py-20 sm:px-10 lg:grid-cols-2">
+    <section id="fairness" className="scroll-mt-20 mx-auto grid max-w-[1440px] items-center gap-12 px-5 py-20 sm:px-8 lg:px-10 lg:grid-cols-2">
       <Reveal className="order-2 lg:order-1">
         <FairnessPlot />
       </Reveal>
       <div className="order-1 lg:order-2">
         <SectionHead eyebrow="Fairness of random papers" title={<>Different papers. <span className="hl">Same difficulty.</span></>} />
-        <Reveal className="-mt-6 space-y-4 text-[16px] leading-relaxed text-ink-2">
+        <Reveal className="-mt-6 space-y-4 text-[18px] leading-relaxed text-ink-2">
           <p>Random papers stop copying, but pure chance can hand one student a much harder exam than the next.</p>
           <p>ExamGuard samples many papers that fit your blueprint and keeps the one closest to the target difficulty. Difficulty is recalibrated from real results, and a fairness report shows examiners the evidence.</p>
         </Reveal>
@@ -381,17 +381,17 @@ function Integrity() {
   return (
     <section id="integrity" className="scroll-mt-20 relative overflow-hidden border-y-2 border-ink bg-accent text-accent-ink">
       <div className="paper-grid pointer-events-none absolute inset-0 opacity-[0.07]" aria-hidden />
-      <div className="relative mx-auto grid max-w-6xl gap-12 px-6 py-20 sm:px-10 lg:grid-cols-[1.1fr_1fr]">
+      <div className="relative mx-auto grid max-w-[1440px] gap-12 px-5 py-20 sm:px-8 lg:px-10 lg:grid-cols-[1.1fr_1fr]">
         <div>
           <Reveal>
-            <div className="mb-3 flex items-center gap-2 font-mono text-[12px] font-semibold uppercase tracking-[0.16em] opacity-80">
+            <div className="mb-3 flex items-center gap-2 font-mono text-[13px] font-semibold uppercase tracking-[0.16em] opacity-80">
               <span className="h-[2px] w-6 rounded bg-margin" aria-hidden /> Integrity in the AI era
             </div>
-            <h2 className="display text-[34px] font-bold leading-[1.08] sm:text-[44px]">Catches cheating, not students.</h2>
-            <p className="mt-4 max-w-lg text-[17px] leading-relaxed opacity-85">Privacy-first signals that an examiner reviews. Candidates see the rules up front and get a clear warning every time. Nothing is decided by a camera or an algorithm.</p>
+            <h2 className="display text-[38px] font-bold leading-[1.08] sm:text-[48px]">Catches cheating, not students.</h2>
+            <p className="mt-4 max-w-lg text-[19px] leading-relaxed opacity-85">Privacy-first signals that an examiner reviews. Candidates see the rules up front and get a clear warning every time. Nothing is decided by a camera or an algorithm.</p>
           </Reveal>
           <div ref={setRef} className="mt-8 grid gap-2 rounded-2xl bg-surface p-5 text-ink shadow-[6px_6px_0_var(--hl)] sm:grid-cols-2">
-            <div className="col-span-full mb-1 flex items-center gap-2 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-muted">
+            <div className="col-span-full mb-1 flex items-center gap-2 font-mono text-[12px] font-bold uppercase tracking-[0.14em] text-muted">
               <Eye className="size-4" /> What we watch for
             </div>
             {watch.map((w, i) => (
@@ -411,7 +411,7 @@ function Integrity() {
               </div>
             ))}
           </Reveal>
-          <p className="mt-4 text-[13px] opacity-70">Peel the sticker ↓ (it's draggable)</p>
+          <p className="mt-4 text-[15px] opacity-70">Peel the sticker ↓ (it's draggable)</p>
           <div className="relative mt-2 h-44">
             <StickerPeel imageSrc="/sticker-no-webcam.svg" width={150} rotate={-8} peelBackHoverPct={20} peelBackActivePct={45} draggable shadowIntensity={0.5} lightingIntensity={0.15} initialPosition={{ x: 20, y: 0 }} />
           </div>
@@ -429,7 +429,7 @@ function How() {
     [BadgeCheck, 'Grade & publish', 'Blind-grade written answers, publish signed results, resolve disputes in the open.'],
   ];
   return (
-    <section id="how" className="scroll-mt-20 mx-auto max-w-6xl px-6 py-20 sm:px-10">
+    <section id="how" className="scroll-mt-20 mx-auto max-w-[1440px] px-5 py-20 sm:px-8 lg:px-10">
       <SectionHead center eyebrow="How it works" title={<>Four steps. <span className="hl">No surprises.</span></>} />
       <div className="relative grid gap-6 md:grid-cols-4">
         <svg className="pointer-events-none absolute left-[12%] right-[12%] top-8 hidden h-2 w-[76%] md:block" preserveAspectRatio="none" viewBox="0 0 100 2" aria-hidden>
@@ -439,10 +439,10 @@ function How() {
           <Reveal key={t} delay={i * 0.12} className="relative text-center">
             <div className="relative mx-auto grid size-16 place-items-center rounded-full border-2 border-ink bg-surface shadow-[3px_3px_0_var(--ink)] transition-transform hover:-rotate-6 hover:scale-105">
               <Icon className="size-6" />
-              <span className="absolute -right-2 -top-2 grid size-7 place-items-center rounded-full bg-hl font-mono text-[12px] font-bold text-hl-ink ring-2 ring-ink">{i + 1}</span>
+              <span className="absolute -right-2 -top-2 grid size-7 place-items-center rounded-full bg-hl font-mono text-[13px] font-bold text-hl-ink ring-2 ring-ink">{i + 1}</span>
             </div>
             <h3 className="display mt-5 text-xl font-bold">{t}</h3>
-            <p className="mx-auto mt-2 max-w-[240px] text-[14px] leading-relaxed text-ink-2">{d}</p>
+            <p className="mx-auto mt-2 max-w-[240px] text-[16px] leading-relaxed text-ink-2">{d}</p>
           </Reveal>
         ))}
       </div>
@@ -458,7 +458,7 @@ function Roles() {
   ];
   return (
     <section className="border-y border-line bg-surface">
-      <div className="mx-auto max-w-6xl px-6 py-20 sm:px-10">
+      <div className="mx-auto max-w-[1440px] px-5 py-20 sm:px-8 lg:px-10">
         <SectionHead eyebrow="Try it yourself" title={<>Pick a seat and <span className="hl">look around.</span></>} sub="The demo is loaded with real-looking exams: one live now, one being graded, one with published results and an open dispute." />
         <div className="grid gap-5 md:grid-cols-3">
           {roles.map(([Icon, title, email, bullets], i) => (
@@ -468,8 +468,8 @@ function Roles() {
                   <Icon className="size-6" />
                 </span>
                 <h3 className="display mt-4 text-2xl font-bold">{title}</h3>
-                <p className="font-mono text-[12px] text-muted">{email}</p>
-                <ul className="mt-4 flex-1 space-y-2 text-[14px] text-ink-2">
+                <p className="font-mono text-[13px] text-muted">{email}</p>
+                <ul className="mt-4 flex-1 space-y-2 text-[16px] text-ink-2">
                   {bullets.map((b) => (
                     <li key={b} className="flex gap-2">
                       <span className="mt-2 size-1.5 shrink-0 rounded-full bg-margin" /> {b}
@@ -497,21 +497,21 @@ function VerifyTeaser() {
     else nav('/verify');
   };
   return (
-    <section className="mx-auto max-w-6xl px-6 py-20 sm:px-10">
+    <section className="mx-auto max-w-[1440px] px-5 py-20 sm:px-8 lg:px-10">
       <Reveal className="relative overflow-hidden rounded-3xl border-2 border-ink bg-surface p-8 shadow-[8px_8px_0_var(--ink)] sm:p-12">
         <div className="paper-grid pointer-events-none absolute inset-0 opacity-60" aria-hidden />
         <div className="relative grid items-center gap-8 md:grid-cols-[1.2fr_1fr]">
           <div>
-            <div className="mb-3 flex items-center gap-2 font-mono text-[12px] font-semibold uppercase tracking-[0.16em] text-ink-2">
+            <div className="mb-3 flex items-center gap-2 font-mono text-[13px] font-semibold uppercase tracking-[0.16em] text-ink-2">
               <span className="h-[2px] w-6 rounded bg-margin" aria-hidden /> Trust & disputes
             </div>
-            <h2 className="display text-[32px] font-bold leading-tight sm:text-[40px]">
+            <h2 className="display text-[36px] font-bold leading-tight sm:text-[46px]">
               Every result is <span className="hl">signed.</span> Check one in seconds.
             </h2>
-            <p className="mt-3 text-[16px] text-ink-2">Employers and universities scan the QR code on a report, or type its code, to confirm it's genuine and unedited. Only initials, exam, score and date are shown.</p>
+            <p className="mt-3 text-[18px] text-ink-2">Employers and universities scan the QR code on a report, or type its code, to confirm it's genuine and unedited. Only initials, exam, score and date are shown.</p>
           </div>
           <form onSubmit={submit} className="rounded-2xl border border-line bg-bg p-5">
-            <div className="font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Verification code</div>
+            <div className="font-mono text-[12px] font-bold uppercase tracking-[0.14em] text-muted">Verification code</div>
             <div className="mt-2 font-mono text-2xl font-bold">
               <DecryptedText text="EG-7Q4K-22MX-PL" animateOn="view" sequential revealDirection="start" speed={55} encryptedClassName="text-muted" />
             </div>
@@ -542,7 +542,7 @@ function Faq() {
   ];
   const [open, setOpen] = useState<number | null>(0);
   return (
-    <section className="mx-auto max-w-3xl px-6 py-20 sm:px-10">
+    <section className="mx-auto max-w-4xl px-5 py-24 sm:px-8 lg:px-10">
       <SectionHead center eyebrow="Questions" title={<>Frequently <span className="hl">asked.</span></>} />
       <div className="space-y-3">
         {qs.map(([q, a], i) => (
@@ -554,7 +554,7 @@ function Faq() {
               </button>
               <div className={cx('grid transition-[grid-template-rows] duration-300', open === i ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]')}>
                 <div className="overflow-hidden">
-                  <p className="px-5 pb-5 text-[15px] leading-relaxed text-ink-2">{a}</p>
+                  <p className="px-5 pb-5 text-[17px] leading-relaxed text-ink-2">{a}</p>
                 </div>
               </div>
             </div>
@@ -568,19 +568,19 @@ function Faq() {
 function FinalCta() {
   const { user } = useAuth();
   return (
-    <section className="px-6 pb-20 sm:px-10">
-      <Reveal className="relative mx-auto max-w-6xl overflow-hidden rounded-3xl bg-hl px-8 py-16 text-center text-hl-ink sm:py-20">
+    <section className="px-5 pb-24 sm:px-8 lg:px-10">
+      <Reveal className="relative mx-auto max-w-[1440px] overflow-hidden rounded-3xl bg-hl px-8 py-16 text-center text-hl-ink sm:py-20">
         <div className="paper-grid pointer-events-none absolute inset-0 opacity-25" aria-hidden />
         <div className="relative">
-          <h2 className="display mx-auto max-w-3xl text-[38px] font-bold leading-[1.05] sm:text-[56px]">Ready when your students are.</h2>
-          <p className="mx-auto mt-4 max-w-xl text-[17px] opacity-80">Sign in with a demo account and run a full exam: create it, sit it, watch it live and publish signed results.</p>
+          <h2 className="display mx-auto max-w-3xl text-[44px] font-bold leading-[1.05] sm:text-[64px]">Ready when your students are.</h2>
+          <p className="mx-auto mt-4 max-w-xl text-[19px] opacity-80">Sign in with a demo account and run a full exam: create it, sit it, watch it live and publish signed results.</p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
             <Magnet padding={60} magnetStrength={4} maxOffset={14}>
-              <Link to={user ? HOME[user.role] : '/login'} className="group inline-flex h-12 items-center gap-2 rounded-xl bg-[#172A46] px-6 text-[15px] font-bold text-white shadow-[0_3px_0_rgb(0_0_0/0.3)] transition-all hover:-translate-y-0.5">
+              <Link to={user ? HOME[user.role] : '/login'} className="group inline-flex h-14 items-center gap-2 rounded-xl bg-[#172A46] px-7 text-[17px] font-bold text-white shadow-[0_3px_0_rgb(0_0_0/0.3)] transition-all hover:-translate-y-0.5">
                 {user ? 'Open your dashboard' : 'Start the demo'} <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
               </Link>
             </Magnet>
-            <Link to="/verify" className="inline-flex h-12 items-center gap-2 rounded-xl border-2 border-[#172A46] px-5 text-[15px] font-bold text-[#172A46] transition-all hover:-translate-y-0.5 hover:bg-white/40">
+            <Link to="/verify" className="inline-flex h-14 items-center gap-2 rounded-xl border-2 border-[#172A46] px-5 text-[17px] font-bold text-[#172A46] transition-all hover:-translate-y-0.5 hover:bg-white/40">
               <BadgeCheck className="size-4" /> Verify a result
             </Link>
           </div>
@@ -593,9 +593,9 @@ function FinalCta() {
 function Footer() {
   return (
     <footer className="border-t border-line bg-surface">
-      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-8 sm:px-10">
+      <div className="mx-auto flex max-w-[1440px] flex-wrap items-center justify-between gap-4 px-5 py-8 sm:px-8 lg:px-10">
         <Logo />
-        <p className="font-mono text-[12px] text-muted">Technoverse 5.0 · Web-e-Thon · Secure Examination Management System</p>
+        <p className="font-mono text-[13px] text-muted">Technoverse 5.0 · Web-e-Thon · Secure Examination Management System</p>
         <div className="flex gap-4 text-sm font-semibold text-ink-2">
           <Link to="/login" className="hover:text-ink">
             Sign in
