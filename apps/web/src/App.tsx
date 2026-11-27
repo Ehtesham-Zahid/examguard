@@ -6,6 +6,7 @@ import { AppShell } from '@/layouts/AppShell';
 import { Spinner } from '@/components/ui';
 
 const Login = lazy(() => import('@/pages/Login'));
+const Landing = lazy(() => import('@/pages/Landing'));
 const Verify = lazy(() => import('@/pages/Verify'));
 const Settings = lazy(() => import('@/pages/Settings'));
 const NotFound = lazy(() => import('@/pages/NotFound'));
@@ -53,7 +54,8 @@ export default function App() {
   return (
     <Suspense fallback={<Spinner />}>
       <Routes>
-        <Route path="/" element={<Home />} />
+        <Route path="/" element={<Landing />} />
+        <Route path="/app" element={<Home />} />
         <Route path="/login" element={<Login />} />
         <Route path="/verify" element={<Verify />} />
         <Route path="/verify/:code" element={<Verify />} />

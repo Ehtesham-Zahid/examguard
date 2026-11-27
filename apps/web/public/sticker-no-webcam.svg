@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="360" viewBox="0 0 360 360">
+  <circle cx="180" cy="180" r="172" fill="#F7E64A" stroke="#172A46" stroke-width="10"/>
+  <circle cx="180" cy="180" r="148" fill="none" stroke="#172A46" stroke-width="3" stroke-dasharray="10 10"/>
+  <g transform="translate(180 150)">
+    <rect x="-62" y="-36" width="96" height="72" rx="14" fill="#fff" stroke="#172A46" stroke-width="9"/>
+    <path d="M34 -14 L66 -34 V34 L34 14 Z" fill="#fff" stroke="#172A46" stroke-width="9" stroke-linejoin="round"/>
+    <circle cx="-14" cy="0" r="14" fill="#172A46"/>
+    <path d="M-84 -58 L84 58" stroke="#E04F5F" stroke-width="16" stroke-linecap="round"/>
+  </g>
+  <text x="180" y="262" text-anchor="middle" font-family="Arial Black, Arial, Helvetica, sans-serif" font-weight="900" font-size="34" textLength="230" lengthAdjust="spacingAndGlyphs" fill="#172A46">NO WEBCAMS</text>
+  <text x="180" y="294" text-anchor="middle" font-family="Courier New, monospace" font-weight="700" font-size="17" textLength="170" lengthAdjust="spacingAndGlyphs" fill="#172A46">PRIVACY-FIRST</text>
+</svg>

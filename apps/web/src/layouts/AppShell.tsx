@@ -210,7 +210,7 @@ export function AppShell() {
   const sidebar = (
     <nav aria-label="Main" className="flex h-full flex-col">
       <div className="flex h-16 items-center px-5">
-        <Link to="/" aria-label="ExamGuard home">
+        <Link to="/app" aria-label="ExamGuard dashboard">
           <Logo />
         </Link>
       </div>

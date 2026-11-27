@@ -170,7 +170,7 @@ export default function ExamLobby() {
                     <SpringCheck
                       checked={agree}
                       onChange={setAgree}
-                      color="var(--line-strong)"
+                      color="var(--ink)"
                       fillColor="var(--ink)"
                       checkColor="var(--hl)"
                       boxSize={20}

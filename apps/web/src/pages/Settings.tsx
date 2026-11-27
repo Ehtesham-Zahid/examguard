@@ -81,7 +81,7 @@ export default function Settings() {
       setCur('');
       setNext('');
       setConfirm('');
-      if (force) nav('/');
+      if (force) nav('/app');
     } catch (e) {
       toast.error(errMsg(e));
     } finally {

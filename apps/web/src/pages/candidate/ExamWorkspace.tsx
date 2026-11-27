@@ -577,7 +577,7 @@ export default function ExamWorkspace() {
         <p className="mt-1 max-w-md text-sm text-muted">{loadError}</p>
         <div className="mt-5 flex gap-2">
           <Button onClick={load}>Try again</Button>
-          <Link to="/"><Button variant="outline">Back to dashboard</Button></Link>
+          <Link to="/app"><Button variant="outline">Back to dashboard</Button></Link>
         </div>
       </FullCenter>
     );

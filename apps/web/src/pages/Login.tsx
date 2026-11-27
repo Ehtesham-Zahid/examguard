@@ -18,13 +18,16 @@ export default function Login() {
   const { user, login } = useAuth();
   const nav = useNavigate();
   const loc = useLocation() as { state?: { from?: string } };
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  // landing-page role cards link here with ?as=admin|examiner|candidate to prefill that demo account
+  const preset = DEMO.find((d) => d.role.toLowerCase().startsWith(new URLSearchParams(window.location.search).get('as') ?? '_'));
+  const [email, setEmail] = useState(preset?.email ?? '');
+  const [password, setPassword] = useState(preset?.password ?? '');
   const [error, setError] = useState('');
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [busy, setBusy] = useState(false);
   const dark = document.documentElement.dataset.theme === 'dark';
-  if (user) return <Navigate to={loc.state?.from ?? '/'} replace />;
+  const home = (u: { role: string }) => ({ ADMIN: '/admin', EXAMINER: '/examiner', CANDIDATE: '/candidate' })[u.role] ?? '/';
+  if (user) return <Navigate to={loc.state?.from ?? home(user)} replace />;
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -36,8 +39,8 @@ export default function Login() {
     setBusy(true);
     setError('');
     try {
-      await login(email.trim(), password);
-      nav(loc.state?.from ?? '/', { replace: true });
+      const u = await login(email.trim(), password);
+      nav(loc.state?.from ?? home(u), { replace: true });
     } catch (err) {
       setError(errMsg(err));
     } finally {
