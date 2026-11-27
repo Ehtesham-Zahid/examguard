@@ -405,14 +405,14 @@ export default function ExamWorkspace() {
   }, [screen, settings]);
 
   /* ------------------------------ navigation ------------------------------ */
-  const commitTime = useCallback(() => {
+  const commitTime = useCallback(async () => {
     const q = questions[current];
     if (!q) return;
     const spent = performance.now() - enteredAt.current;
     enteredAt.current = performance.now();
     if (spent < 500) return;
     const a = answersRef.current[q.id];
-    persist(q.id, { ...a, visited: true, timeSpentMs: (a?.timeSpentMs ?? 0) + spent });
+    await persist(q.id, { ...a, visited: true, timeSpentMs: (a?.timeSpentMs ?? 0) + spent });
   }, [questions, current, persist]);
 
   const go = useCallback(
@@ -485,9 +485,11 @@ export default function ExamWorkspace() {
       }
       setReviewOpen(false);
       setScreen('finishing');
-      commitTime();
+      await commitTime(); // the time-on-question update must be queued before the final flush
       // push every queued answer first; retry a few times if the network is flaky
       for (let i = 0; i < 4; i++) {
+        // an autosave already in flight isn't a failure: wait for it, then flush whatever is left
+        for (let w = 0; flushing.current && w < 50; w++) await new Promise((r) => setTimeout(r, 100));
         if (await flush()) break;
         await new Promise((r) => setTimeout(r, 1200 * (i + 1)));
       }
@@ -608,7 +610,7 @@ export default function ExamWorkspace() {
                   'relative grid h-10 w-full place-items-center rounded-lg border-[1.5px] font-mono text-sm font-semibold tabular transition-all duration-150 hover:-translate-y-px disabled:opacity-40',
                   done ? 'pop border-ink bg-ink text-surface' : a?.visited ? 'border-line-strong bg-surface-2 text-ink' : 'border-line bg-surface text-muted',
                   a?.flagged && !done && 'border-dashed border-margin',
-                  i === current && 'outline-2 outline-offset-2 outline-margin',
+                  i === current && 'ring-2 ring-margin ring-offset-2 ring-offset-[var(--surface)]',
                 )}
               >
                 {i + 1}
@@ -677,7 +679,7 @@ export default function ExamWorkspace() {
         {paletteSide !== 'hidden' && <aside className="hidden w-[260px] shrink-0 border-line bg-surface p-4 md:block md:border-r">{palette}</aside>}
         <main id="exam-main" className="relative min-w-0 flex-1 overflow-y-auto">
           <Watermark text={watermark} />
-          <div key={layout === 'single' ? current : 'all'} className="margin-line page-enter relative mx-auto max-w-3xl py-8 pl-10 pr-4 sm:pl-14 sm:pr-8 [&::before]:left-4 sm:[&::before]:left-7">
+          <div key={layout === 'single' ? current : 'all'} className="margin-line page-enter relative mx-auto min-h-full max-w-3xl py-8 pl-10 pr-4 sm:pl-14 sm:pr-8 [&::before]:left-4 sm:[&::before]:left-7">
             {layout === 'single' && q && (
               <QuestionView key={q.id} q={q} a={answers[q.id]} total={questions.length} onAnswer={(r) => answer(q.id, r)} onFlag={() => persist(q.id, { flagged: !answers[q.id]?.flagged })} onTyping={(e, p) => onTyping(q.id, e, p)} disabled={paused} />
             )}
