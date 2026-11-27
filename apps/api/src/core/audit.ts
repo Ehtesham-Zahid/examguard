@@ -4,10 +4,17 @@ import { prisma } from './prisma.js';
 const GENESIS = '0'.repeat(64);
 let chain: Promise<unknown> = Promise.resolve();
 
+/** Stable stringify: Postgres jsonb reorders object keys, so hash a canonical (sorted-key) form. */
+export function canonical(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(canonical).join(',')}]`;
+  if (v && typeof v === 'object') return `{${Object.keys(v as object).sort().map((k) => `${JSON.stringify(k)}:${canonical((v as Record<string, unknown>)[k])}`).join(',')}}`;
+  return JSON.stringify(v ?? null);
+}
+
 export function hashEntry(prevHash: string, e: { actorId: string | null; action: string; entity: string; entityId: string | null; data: unknown; createdAt: string }) {
   return crypto
     .createHash('sha256')
-    .update(prevHash + JSON.stringify([e.actorId, e.action, e.entity, e.entityId, e.data, e.createdAt]))
+    .update(prevHash + canonical([e.actorId, e.action, e.entity, e.entityId, e.data, e.createdAt]))
     .digest('hex');
 }
 
