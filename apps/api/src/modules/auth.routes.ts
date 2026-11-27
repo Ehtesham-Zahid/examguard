@@ -1,7 +1,7 @@
 import { Router, type Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { prisma } from '../core/prisma.js';
 import { authenticate, currentUser, signAccessToken, signRefreshToken, verifyToken } from '../core/auth.js';
 import { badRequest, unauthorized } from '../core/errors.js';
@@ -14,7 +14,8 @@ const COOKIE = 'eg_refresh';
 const MAX_FAILS = 5;
 const LOCK_MIN = 15;
 
-const loginLimiter = rateLimit({ windowMs: 60_000, limit: 20, standardHeaders: true, legacyHeaders: false, message: { error: { code: 'RATE_LIMIT', message: 'Too many login attempts, wait a minute' } } });
+// per IP + email: brute force on one account is capped (plus account lockout), a shared lab IP is not
+const loginLimiter = rateLimit({ windowMs: 60_000, limit: 10, keyGenerator: (req) => `${ipKeyGenerator(req.ip ?? '')}:${String(req.body?.email ?? '').toLowerCase()}`, standardHeaders: true, legacyHeaders: false, message: { error: { code: 'RATE_LIMIT', message: 'Too many login attempts, wait a minute' } } });
 
 export const publicUser = (u: { id: string; name: string; email: string; role: string; mustChangePassword: boolean; prefs: unknown; groupName: string | null }) => ({
   id: u.id,

@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -23,7 +23,18 @@ export function createApp() {
   app.use(cors({ origin: config.clientOrigins, credentials: true, exposedHeaders: ['Content-Disposition'] }));
   app.use(express.json({ limit: '4mb' }));
   app.use(cookieParser());
-  app.use('/api', rateLimit({ windowMs: 60_000, limit: 600, standardHeaders: true, legacyHeaders: false, message: { error: { code: 'RATE_LIMIT', message: 'Too many requests, slow down' } } }));
+  // Keyed per signed-in user (not per IP) so a whole exam hall behind one NAT address isn't throttled together
+  app.use(
+    '/api',
+    rateLimit({
+      windowMs: 60_000,
+      limit: 600,
+      standardHeaders: true,
+      legacyHeaders: false,
+      keyGenerator: (req) => req.headers.authorization?.slice(-24) ?? ipKeyGenerator(req.ip ?? ''),
+      message: { error: { code: 'RATE_LIMIT', message: 'Too many requests, slow down' } },
+    }),
+  );
 
   app.get('/api/health', (_req, res) => res.json({ ok: true }));
   /** Authoritative server clock: the client only displays a countdown derived from this. */

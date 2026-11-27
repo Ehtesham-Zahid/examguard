@@ -121,6 +121,12 @@ export async function startAttempt(opts: { examId: string; userId: string; sandb
 async function resumeAttempt(existing: Prisma.AttemptGetPayload<object>, opts: { sessionId: string; ip?: string; ua?: string }) {
   if (existing.status !== 'IN_PROGRESS') throw conflict('You have already submitted this examination', 'ALREADY_SUBMITTED');
   if (existing.activeSessionId === opts.sessionId) return { attempt: existing, resumed: true };
+  // no device bound (e.g. attempt reopened after an approved outage compensation): bind this one
+  if (!existing.activeSessionId) {
+    const attempt = await prisma.attempt.update({ where: { id: existing.id }, data: { activeSessionId: opts.sessionId, lastHeartbeatAt: new Date() } });
+    await prisma.attemptEvent.create({ data: { attemptId: existing.id, type: 'device_bound', payload: { ip: opts.ip, ua: opts.ua?.slice(0, 200) } } });
+    return { attempt, resumed: true };
+  }
 
   const silentFor = Date.now() - (existing.lastHeartbeatAt?.getTime() ?? 0);
   const approved = await prisma.sessionTransfer.findFirst({ where: { attemptId: existing.id, sessionId: opts.sessionId, status: 'APPROVED' } });
