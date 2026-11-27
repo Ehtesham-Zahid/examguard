@@ -12,14 +12,14 @@ import { audit } from '../core/audit.js';
 type Tx = Prisma.TransactionClient;
 
 /** Build the frozen question list for a new attempt (fixed list or fair blueprint). */
-export async function buildPaper(tx: Tx, exam: { id: string; mode: string; blueprint: unknown; settings: unknown }, seed: string) {
+export async function buildPaper(tx: Tx, exam: { id: string; ownerId: string; mode: string; blueprint: unknown; settings: unknown }, seed: string) {
   const settings = readSettings(exam.settings);
   const rand = rng(seed);
 
   if (exam.mode === 'BLUEPRINT') {
     const slots = (exam.blueprint as Slot[] | null) ?? [];
     const questions = await tx.question.findMany({
-      where: { archived: false, OR: slots.map((s) => ({ topicId: s.topicId, difficulty: s.difficulty as 'EASY' })) },
+      where: { archived: false, ownerId: exam.ownerId, OR: slots.map((s) => ({ topicId: s.topicId, difficulty: s.difficulty as 'EASY' })) },
       include: { versions: true },
     });
     const pool: PoolQuestion[] = questions.map((q) => ({ id: q.id, topicId: q.topicId, difficulty: q.difficulty, p: easiness(q) }));

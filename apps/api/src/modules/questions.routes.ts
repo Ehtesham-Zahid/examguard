@@ -74,8 +74,10 @@ const shape = (q: Prisma.QuestionGetPayload<{ include: typeof withCurrent }>) =>
   return { ...q, current: cur, versionCount: q.versions.length, versions: undefined, usedInExams: q._count.examQuestions };
 };
 
-questionsRouter.get('/topics', async (_req, res) => {
-  const topics = await prisma.topic.findMany({ orderBy: { name: 'asc' }, include: { _count: { select: { questions: { where: { archived: false } } } } } });
+questionsRouter.get('/topics', async (req, res) => {
+  const me = currentUser(req);
+  const scope = me.role === 'EXAMINER' ? { ownerId: me.id } : {};
+  const topics = await prisma.topic.findMany({ orderBy: { name: 'asc' }, include: { _count: { select: { questions: { where: { archived: false, ...scope } } } } } });
   res.json(topics.map((t) => ({ id: t.id, name: t.name, questionCount: t._count.questions })));
 });
 

@@ -94,7 +94,6 @@ examsRouter.get('/:id', async (req, res) => {
   });
 });
 
-const STRUCTURAL = ['windowStart', 'durationMin', 'settings', 'passMarks'] as const;
 examsRouter.put('/:id', async (req, res) => {
   const me = currentUser(req);
   const exam = await loadExamForStaff(me, param(req, 'id'));
@@ -103,10 +102,13 @@ examsRouter.put('/:id', async (req, res) => {
   if (phase === 'COMPLETED' || phase === 'ARCHIVED') throw conflict('Completed examinations can no longer be edited');
   if (phase === 'ONGOING') {
     // only safe edits while candidates are writing: text and extending the window end
-    const changed = STRUCTURAL.filter((k) => JSON.stringify(body[k]) !== JSON.stringify(k === 'settings' ? body.settings && { ...readSettings(exam.settings), ...body.settings } : exam[k]));
     if (body.windowStart.getTime() !== exam.windowStart.getTime() || body.durationMin !== exam.durationMin) throw conflict('Start time and duration cannot change while the exam is ongoing');
     if (body.windowEnd < exam.windowEnd) throw conflict('The window can only be extended while the exam is ongoing');
-    void changed;
+    if (body.passMarks !== exam.passMarks) throw conflict('The pass mark cannot change while the exam is ongoing');
+    const cur = readSettings(exam.settings);
+    const next = { ...cur, ...body.settings };
+    const changed = (Object.keys(cur) as (keyof typeof cur)[]).filter((k) => cur[k] !== next[k]);
+    if (changed.length) throw conflict(`Exam rules cannot change while the exam is ongoing (${changed.join(', ')})`);
   }
   const updated = await prisma.exam.update({ where: { id: exam.id }, data: { ...body, accessCode: body.accessCode || null, settings: { ...readSettings(exam.settings), ...body.settings } } });
   audit(me.id, 'exam.update', 'Exam', exam.id);
@@ -155,7 +157,7 @@ examsRouter.put('/:id/blueprint', async (req, res) => {
   const exam = await loadExamForStaff(me, param(req, 'id'));
   assertDraft(exam);
   const { slots } = parseBody(z.object({ slots: z.array(slotSchema).min(1, 'Add at least one blueprint row').max(30) }), req);
-  const problems = validateBlueprint(await poolFor(slots, me.role === 'EXAMINER' ? me.id : null), slots);
+  const problems = validateBlueprint(await poolFor(slots, exam.ownerId), slots);
   if (problems.length) throw badRequest(problems[0], problems);
   await prisma.exam.update({ where: { id: exam.id }, data: { mode: 'BLUEPRINT', blueprint: slots } });
   const updated = await recomputeExamTotals(exam.id);
@@ -169,7 +171,7 @@ examsRouter.get('/:id/fairness', async (req, res) => {
   const exam = await loadExamForStaff(me, param(req, 'id'));
   if (exam.mode !== 'BLUEPRINT' || !exam.blueprint) return res.json({ mode: exam.mode, message: 'Fairness analysis applies to blueprint-based randomised exams' });
   const slots = exam.blueprint as unknown as Slot[];
-  const pool = await poolFor(slots, null);
+  const pool = await poolFor(slots, exam.ownerId);
   const N = 40;
   const usage = new Map<string, number>();
   const fair = Array.from({ length: N }, (_, i) => {
@@ -211,7 +213,7 @@ async function reviewChecklist(examId: string) {
     checks.push({ label: 'No archived questions', ok: archived === 0, blocking: true, detail: archived ? `${archived} archived question(s)` : undefined });
   } else {
     const slots = (exam.blueprint as unknown as Slot[]) ?? [];
-    const problems = validateBlueprint(await poolFor(slots, null), slots);
+    const problems = validateBlueprint(await poolFor(slots, exam.ownerId), slots);
     checks.push({ label: 'Blueprint can be satisfied by the question bank', ok: slots.length > 0 && problems.length === 0, blocking: true, detail: problems[0] });
   }
   checks.push({ label: 'Total marks greater than zero', ok: exam.totalMarks > 0, blocking: true, detail: `${exam.totalMarks} marks` });
@@ -343,12 +345,12 @@ examsRouter.post('/:id/enrollments', async (req, res) => {
   const me = currentUser(req);
   const exam = await loadExamForStaff(me, param(req, 'id'));
   if (examPhase(exam) === 'COMPLETED' || exam.status === 'ARCHIVED') throw conflict('Cannot enrol candidates in a completed examination');
-  const body = parseBody(z.object({ candidateIds: z.array(z.string()).max(2000).default([]), group: z.string().optional(), emails: z.array(z.string().email()).max(2000).default([]) }), req);
+  const body = parseBody(z.object({ candidateIds: z.array(z.string()).max(2000).default([]), group: z.string().optional(), emails: z.array(z.string().trim().max(200)).max(2000).default([]) }), req);
   const ids = new Set(body.candidateIds);
   if (body.group) (await prisma.user.findMany({ where: { role: 'CANDIDATE', groupName: body.group, status: 'ACTIVE' }, select: { id: true } })).forEach((u) => ids.add(u.id));
   const unknownEmails: string[] = [];
   if (body.emails.length) {
-    const found = await prisma.user.findMany({ where: { role: 'CANDIDATE', email: { in: body.emails.map((e) => e.toLowerCase()) } }, select: { id: true, email: true } });
+    const found = await prisma.user.findMany({ where: { role: 'CANDIDATE', email: { in: body.emails.filter(Boolean).map((e) => e.toLowerCase()) } }, select: { id: true, email: true } });
     found.forEach((u) => ids.add(u.id));
     body.emails.forEach((e) => !found.some((f) => f.email === e.toLowerCase()) && unknownEmails.push(e));
   }
