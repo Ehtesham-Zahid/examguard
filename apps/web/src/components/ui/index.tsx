@@ -193,6 +193,20 @@ export function Spinner({ label = 'Loading' }: { label?: string }) {
     </div>
   );
 }
+/** Full-screen loader for whole-page loads (route chunks, restoring a session): centred in the viewport and a bit larger. */
+export function PageLoader({ label = 'Loading' }: { label?: string }) {
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-bg" role="status">
+      <div className="flex flex-col items-center gap-4 text-base font-medium text-muted">
+        <svg width="120" height="52" viewBox="0 0 64 28" aria-hidden className="text-accent">
+          <path d="M4 18c6-10 10-10 14 0s8 10 12 0 8-10 12 0 8 10 14-2" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeDasharray="120" style={{ animation: 'scribble-load 1.4s ease-in-out infinite' }} />
+          <rect x="2" y="21" width="60" height="5" rx="2" fill="var(--hl)" opacity=".7" />
+        </svg>
+        <span>{label}…</span>
+      </div>
+    </div>
+  );
+}
 export function EmptyState({ icon, title, body, action }: { icon?: ReactNode; title: string; body?: ReactNode; action?: ReactNode }) {
   return (
     <div className="fade-in flex flex-col items-center justify-center px-6 py-14 text-center">

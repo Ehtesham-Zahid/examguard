@@ -5,7 +5,7 @@ import { Navigate, Route, Routes, useLocation, Outlet } from 'react-router-dom';
 import { useAuth } from '@/lib/auth';
 import type { Role } from '@/lib/types';
 import { AppShell } from '@/layouts/AppShell';
-import { Spinner } from '@/components/ui';
+import { PageLoader } from '@/components/ui';
 
 const Login = lazy(() => import('@/pages/Login'));
 const Landing = lazy(() => import('@/pages/Landing'));
@@ -40,7 +40,7 @@ const HOME: Record<Role, string> = { ADMIN: '/admin', EXAMINER: '/examiner', CAN
 function Guard({ roles, children }: { roles?: Role[]; children: ReactNode }) {
   const { user, loading } = useAuth();
   const loc = useLocation();
-  if (loading) return <Spinner label="Restoring your session" />;
+  if (loading) return <PageLoader label="Restoring your session" />;
   if (!user) return <Navigate to="/login" replace state={{ from: loc.pathname }} />;
   if (user.mustChangePassword && loc.pathname !== '/settings') return <Navigate to="/settings?force=1" replace />;
   if (roles && !roles.includes(user.role)) return <Navigate to={HOME[user.role]} replace />;
@@ -50,7 +50,7 @@ function Guard({ roles, children }: { roles?: Role[]; children: ReactNode }) {
 /** Unknown URLs: inside the app shell when signed in, a bare page for visitors (no forced login). */
 function MaybeShell() {
   const { user, loading } = useAuth();
-  if (loading) return <Spinner />;
+  if (loading) return <PageLoader />;
   if (user) return <AppShell />;
   return (
     <div className="grid min-h-dvh place-items-center bg-bg p-6">
@@ -61,7 +61,7 @@ function MaybeShell() {
 
 function Home() {
   const { user, loading } = useAuth();
-  if (loading) return <Spinner />;
+  if (loading) return <PageLoader />;
   return <Navigate to={user ? HOME[user.role] : '/login'} replace />;
 }
 
@@ -72,7 +72,7 @@ export default function App() {
   const reduce = !!(user?.prefs?.reduceMotion ?? localPrefs().reduceMotion);
   return (
     <MotionConfig reducedMotion={reduce ? 'always' : 'user'}>
-    <Suspense fallback={<Spinner />}>
+    <Suspense fallback={<PageLoader />}>
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/app" element={<Home />} />

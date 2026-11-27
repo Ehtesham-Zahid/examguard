@@ -10,7 +10,7 @@ import { acknowledge, clearAttempt, db, dropRejected, loadSnapshot, markPendingO
 import { getSessionId, sessionHeaders } from '@/lib/session';
 import { getSocket } from '@/lib/socket';
 import { localPrefs } from '@/lib/theme';
-import { Badge, Button, ButtonLink, cx, Kbd, Modal } from '@/components/ui';
+import { Badge, Button, ButtonLink, cx, Kbd, Modal, PageLoader } from '@/components/ui';
 import { Logo } from '@/layouts/AppShell';
 import { PreferenceControls } from '@/pages/Settings';
 import { isAnswered, QuestionView, type WAnswer, type WQuestion } from './workspace/QuestionView';
@@ -600,7 +600,7 @@ export default function ExamWorkspace() {
   };
 
   /* ------------------------------ screens ------------------------------ */
-  if (screen === 'loading') return <FullCenter><Loader2 className="size-6 animate-spin text-muted" /><p className="mt-3 text-sm text-muted">Preparing your exam…</p></FullCenter>;
+  if (screen === 'loading') return <PageLoader label="Preparing your exam" />;
   if (screen === 'error')
     return (
       <FullCenter>
