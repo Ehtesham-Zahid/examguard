@@ -21,6 +21,7 @@
   --warn-soft: #fbefd9;
   --danger: #b42318;
   --danger-soft: #fbe4e1;
+  --danger-ink: #ffffff;
   --ok: #157f3c;
   --ok-soft: #e1f3e7;
   --focus: #2563eb;
@@ -51,6 +52,7 @@
   --warn-soft: #3a2a12;
   --danger: #ff8a7a;
   --danger-soft: #3c1d1a;
+  --danger-ink: #1a0b09;
   --ok: #6fd394;
   --ok-soft: #16301f;
   --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 6px 20px rgb(0 0 0 / 0.25);
@@ -74,6 +76,7 @@
   --warn-soft: #332b00;
   --danger: #ff6b6b;
   --danger-soft: #330000;
+  --danger-ink: #000000;
   --ok: #4ade80;
   --ok-soft: #002b10;
   --focus: #ffd400;
@@ -99,6 +102,7 @@
   --color-warn-soft: var(--warn-soft);
   --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
+  --color-danger-ink: var(--danger-ink);
   --color-ok: var(--ok);
   --color-ok-soft: var(--ok-soft);
   --font-sans: var(--font-ui);

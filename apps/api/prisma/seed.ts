@@ -254,7 +254,8 @@ async function main() {
     await prisma.answer.update({ where: { attemptQuestionId: isoQ.id }, data: { response: ['c'] } });
     await prisma.$transaction((tx) => gradeAttempt(tx, s2Attempt.id));
     await issueCertificate(s2Attempt.id);
-    await prisma.dispute.create({ data: { attemptId: s2Attempt.id, attemptQuestionId: isoQ.id, raisedById: student2.id, category: 'AMBIGUOUS_QUESTION', message: 'In PostgreSQL and MySQL InnoDB, Repeatable Read also prevents phantom reads, so option C should also be accepted. The question does not say "per SQL standard only".', scoreBefore: s2Attempt.score } });
+    const disp = await prisma.dispute.create({ data: { attemptId: s2Attempt.id, attemptQuestionId: isoQ.id, raisedById: student2.id, category: 'AMBIGUOUS_QUESTION', message: 'In PostgreSQL and MySQL InnoDB, Repeatable Read also prevents phantom reads, so option C should also be accepted. The question does not say "per SQL standard only".', scoreBefore: s2Attempt.score } });
+    await audit(student2.id, 'dispute.open', 'Dispute', disp.id, { attemptId: s2Attempt.id, category: 'AMBIGUOUS_QUESTION' });
   }
 
   await prisma.announcement.create({ data: { examId: live.id, authorId: examiner.id, message: 'Welcome! Question 6 uses 0-based array indexing.' } });

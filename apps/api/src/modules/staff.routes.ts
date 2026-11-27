@@ -79,7 +79,7 @@ staffRouter.get('/attempts/:id', async (req, res) => {
     prisma.dispute.findMany({ where: { attemptId: attempt.id } }),
   ]);
   res.json({
-    attempt: { ...attempt, exam: { id: attempt.exam.id, title: attempt.exam.title, passMarks: attempt.exam.passMarks, resultsPublishedAt: attempt.exam.resultsPublishedAt } },
+    attempt: { ...attempt, submitKey: undefined, activeSessionId: undefined, exam: { id: attempt.exam.id, title: attempt.exam.title, passMarks: attempt.exam.passMarks, resultsPublishedAt: attempt.exam.resultsPublishedAt } },
     candidate,
     questions: aqs.map((aq) => ({
       id: aq.id,
@@ -177,6 +177,8 @@ staffRouter.post('/transfers/:id/decide', async (req, res) => {
   if (!t) throw notFound();
   const attempt = await loadAttemptForStaff(me, t.attemptId);
   const { approve } = parseBody(z.object({ approve: z.boolean() }), req);
+  if (t.status !== 'PENDING') throw conflict('This request has already been decided');
+  if (approve && attempt.status !== 'IN_PROGRESS') throw conflict('The attempt is no longer in progress — the switch is no longer needed');
   await prisma.sessionTransfer.update({ where: { id: t.id }, data: { status: approve ? 'APPROVED' : 'REJECTED', decidedById: me.id, decidedAt: new Date() } });
   if (approve) {
     await prisma.attempt.update({ where: { id: attempt.id }, data: { activeSessionId: t.sessionId } });

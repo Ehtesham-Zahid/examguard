@@ -12,7 +12,7 @@ const variants: Record<Variant, string> = {
   secondary: 'bg-surface-2 text-ink hover:bg-line',
   outline: 'border border-line-strong bg-surface text-ink hover:bg-surface-2',
   ghost: 'text-ink-2 hover:bg-surface-2 hover:text-ink',
-  danger: 'bg-danger text-white hover:brightness-110',
+  danger: 'bg-danger text-danger-ink hover:brightness-110',
 };
 export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; size?: 'sm' | 'md' | 'lg'; loading?: boolean; icon?: ReactNode }>(
   ({ variant = 'primary', size = 'md', loading, icon, className, children, disabled, ...rest }, ref) => (
