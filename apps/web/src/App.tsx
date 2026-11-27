@@ -12,6 +12,9 @@ const Landing = lazy(() => import('@/pages/Landing'));
 const Verify = lazy(() => import('@/pages/Verify'));
 const Settings = lazy(() => import('@/pages/Settings'));
 const NotFound = lazy(() => import('@/pages/NotFound'));
+const ForgotPassword = lazy(() => import('@/pages/ForgotPassword'));
+const ResetPassword = lazy(() => import('@/pages/ResetPassword'));
+const AdminEmails = lazy(() => import('@/pages/admin/AdminEmails'));
 const AdminDashboard = lazy(() => import('@/pages/admin/AdminDashboard'));
 const AdminUsers = lazy(() => import('@/pages/admin/AdminUsers'));
 const AdminAudit = lazy(() => import('@/pages/admin/AdminAudit'));
@@ -75,6 +78,8 @@ export default function App() {
         <Route path="/app" element={<Home />} />
         <Route path="/login" element={<Login />} />
         <Route path="/verify" element={<Verify />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/verify/:code" element={<Verify />} />
         <Route
           path="/exam/:attemptId"
@@ -95,6 +100,7 @@ export default function App() {
           <Route path="/admin" element={<Guard roles={['ADMIN']}><AdminDashboard /></Guard>} />
           <Route path="/admin/users" element={<Guard roles={['ADMIN']}><AdminUsers /></Guard>} />
           <Route path="/admin/audit" element={<Guard roles={['ADMIN']}><AdminAudit /></Guard>} />
+          <Route path="/admin/emails" element={<Guard roles={['ADMIN']}><AdminEmails /></Guard>} />
           <Route path="/examiner" element={<Guard roles={STAFF}><ExaminerDashboard /></Guard>} />
           <Route path="/examiner/exams" element={<Guard roles={STAFF}><ExamList /></Guard>} />
           <Route path="/examiner/exams/:id" element={<Guard roles={STAFF}><ExamEditor /></Guard>} />

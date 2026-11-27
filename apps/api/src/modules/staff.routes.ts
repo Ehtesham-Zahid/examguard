@@ -14,6 +14,7 @@ import { issueCertificate } from '../services/certificates.service.js';
 import { audit } from '../core/audit.js';
 import { emitToMonitors, emitToUser } from '../core/realtime.js';
 import { notify } from '../core/notify.js';
+import { queueEmails, queueForUsers } from '../services/email/outbox.js';
 import { SIGNALS } from '../services/integrity.service.js';
 
 export const staffRouter = Router();
@@ -164,6 +165,7 @@ staffRouter.post('/compensations/:id/decide', async (req, res) => {
       await prisma.attempt.update({ where: { id: attempt.id }, data: { status: 'IN_PROGRESS', submittedAt: null, deadline: new Date(Date.now() + grant * 1000), extraTimeSec: { increment: grant }, activeSessionId: null, lastHeartbeatAt: new Date() } });
       await prisma.attemptEvent.create({ data: { attemptId: attempt.id, type: 'attempt_reopened', payload: { seconds: grant, by: me.name } } });
       await notify([attempt.candidateId], 'Your exam has been reopened', `You have ${Math.round(grant / 60)} minute(s) remaining — the time you lost during the outage.`, `/candidate/exams/${attempt.examId}`);
+      await queueForUsers([attempt.candidateId], 'exam_reopened', { title: attempt.exam.title, examId: attempt.examId, minutes: Math.round(grant / 60) }, (u) => `reopened:${comp.id}:${u}`);
       reopened = true;
     }
   }
@@ -280,8 +282,17 @@ staffRouter.post('/exams/:id/results/publish', async (req, res) => {
   if (pending) throw conflict(`${pending} attempt(s) still need manual grading`);
   if (!attempts.length) throw conflict('There are no submissions to publish');
   for (const a of attempts) await issueCertificate(a.id);
-  await prisma.exam.update({ where: { id: exam.id }, data: { resultsPublishedAt: new Date() } });
+  const publishedAt = new Date();
+  await prisma.exam.update({ where: { id: exam.id }, data: { resultsPublishedAt: publishedAt } });
   await notify(attempts.map((a) => a.candidateId), 'Results published', `Your result for ${exam.title} is available`, '/candidate/results');
+  const certs = new Map((await prisma.certificate.findMany({ where: { attemptId: { in: attempts.map((a) => a.id) }, revoked: false }, select: { attemptId: true, code: true } })).map((c) => [c.attemptId, c.code]));
+  const people = new Map((await prisma.user.findMany({ where: { id: { in: attempts.map((a) => a.candidateId) } }, select: { id: true, email: true, name: true, prefs: true, status: true } })).map((u) => [u.id, u]));
+  await queueEmails(
+    attempts.flatMap((a) => {
+      const u = people.get(a.candidateId);
+      return u ? [{ user: u, kind: 'results_published' as const, data: { title: exam.title, attemptId: a.id, certificateCode: certs.get(a.id) ?? null }, dedupeKey: `results:${a.id}:${publishedAt.getTime()}` }] : [];
+    }),
+  );
   audit(me.id, 'results.publish', 'Exam', exam.id, { count: attempts.length });
   res.json({ ok: true, published: attempts.length });
 });
@@ -557,7 +568,11 @@ staffRouter.post('/disputes/:id/resolve', async (req, res) => {
   await prisma.dispute.update({ where: { id: d.id }, data: { status: body.decision, resolution: body.resolution, resolverId: me.id, resolvedAt: new Date(), scoreBefore, scoreAfter: own?.score ?? scoreBefore, affectedCount: changed.length } });
   audit(me.id, `dispute.${body.decision.toLowerCase()}`, 'Dispute', d.id, { action: body.action, resolution: body.resolution, scoreBefore, scoreAfter: own?.score, affectedCandidates: changed.length });
   await notify([d.raisedById], `Dispute ${body.decision === 'UPHELD' ? 'upheld' : 'rejected'}`, body.resolution, '/candidate/disputes');
-  const others = changed.filter((c) => c.candidateId !== d.raisedById).map((c) => c.candidateId);
+  await queueForUsers([d.raisedById], 'dispute_decided', { title: d.attempt.exam.title, decision: body.decision, resolution: body.resolution }, (u) => `dispute:${d.id}:${u}`);
+  const othersChanged = changed.filter((c) => c.candidateId !== d.raisedById);
+  const others = othersChanged.map((c) => c.candidateId);
   if (others.length) await notify(others, 'Your score was updated', `A question in ${d.attempt.exam.title} was re-graded after a review.`, '/candidate/results');
+  if (d.attempt.exam.resultsPublishedAt)
+    for (const c of othersChanged) await queueForUsers([c.candidateId], 'score_updated', { title: d.attempt.exam.title, attemptId: c.id }, (u) => `rescore:${d.id}:${u}`);
   res.json({ ok: true, scoreBefore, scoreAfter: own?.score, affectedCandidates: changed.length });
 });

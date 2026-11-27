@@ -77,7 +77,8 @@ export function CreateUserModal({ open, onClose }: { open: boolean; onClose: () 
           <p className="text-sm text-ink-2">
             <strong className="text-ink">{result.user.name}</strong> ({result.user.email}) can now sign in as {ROLE_LABEL[result.user.role].toLowerCase()}.
           </p>
-          {result.temporaryPassword && <SecretReveal label="Temporary password" value={result.temporaryPassword} />}
+          <p className="text-sm text-ink-2">A welcome email with a link to set their own password is on its way (valid for 7 days).</p>
+          {result.temporaryPassword && <SecretReveal label="Temporary password (if email can’t reach them)" value={result.temporaryPassword} />}
         </div>
       ) : (
         <form id="create-user" onSubmit={submit} className="grid gap-4 sm:grid-cols-2" noValidate>

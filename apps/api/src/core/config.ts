@@ -17,4 +17,19 @@ export const config = {
   refreshTtlDays: 7,
   isProd: process.env.NODE_ENV === 'production',
   publicUrl: (external ?? origins[0]).replace(/\/$/, ''),
+  email: {
+    // Gmail: SMTP_USER = the Gmail / Workspace address, SMTP_PASS = a 16-character App Password
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: Number(process.env.SMTP_PORT || 465),
+    user: (process.env.SMTP_USER ?? '').trim(),
+    pass: (process.env.SMTP_PASS ?? '').replace(/\s+/g, ''), // app passwords are often pasted as "abcd efgh ijkl mnop"
+    from: (process.env.EMAIL_FROM ?? '').trim(),
+    replyTo: (process.env.EMAIL_REPLY_TO ?? '').trim() || undefined,
+    timeZone: process.env.EMAIL_TIMEZONE || 'Asia/Karachi',
+    /** Demo accounts use reserved domains (*.test) that can never receive mail; only a local test sink allows them. */
+    allowReservedDomains: process.env.EMAIL_ALLOW_TEST_DOMAINS === 'true',
+    disabled: process.env.EMAIL_DISABLED === 'true',
+  },
 };
+
+export const emailConfigured = () => !config.email.disabled && !!config.email.user && !!config.email.pass;

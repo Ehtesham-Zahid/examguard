@@ -11,6 +11,20 @@ import { audit, verifyAuditChain } from '../core/audit.js';
 import { passwordSchema } from './auth.routes.js';
 import { loadExamForStaff } from '../core/policy.js';
 import { disconnectUser } from '../core/realtime.js';
+import { issuePasswordToken, queueEmails, queueExamEmail } from '../services/email/outbox.js';
+import { examPhase } from '../domain/examPhase.js';
+
+const WELCOME_TTL = 7 * 86_400_000;
+
+/** Welcome email with a one-time "set your password" link (the temporary password still works too). */
+async function sendWelcome(users: { id: string; email: string; name: string; role: string }[], invitedBy: string) {
+  const items = [];
+  for (const u of users) {
+    const { token, expiresAt } = await issuePasswordToken(u.id, 'welcome', WELCOME_TTL);
+    items.push({ user: u, kind: 'welcome' as const, data: { token, expiresAt: expiresAt.toISOString(), role: u.role, invitedBy } });
+  }
+  await queueEmails(items);
+}
 
 export const usersRouter = Router();
 usersRouter.use(authenticate);
@@ -60,7 +74,8 @@ usersRouter.post('/', requireRole('ADMIN'), async (req, res) => {
     select,
   });
   audit(currentUser(req).id, 'user.create', 'User', user.id, { email: user.email, role: user.role });
-  res.status(201).json({ user, temporaryPassword: body.password ? undefined : password });
+  await sendWelcome([{ id: user.id, email: user.email, name: user.name, role: user.role }], currentUser(req).name);
+  res.status(201).json({ user, temporaryPassword: body.password ? undefined : password, emailed: true });
 });
 
 usersRouter.patch('/:id', requireRole('ADMIN'), async (req, res) => {
@@ -85,10 +100,12 @@ usersRouter.patch('/:id', requireRole('ADMIN'), async (req, res) => {
 usersRouter.post('/:id/reset-password', requireRole('ADMIN'), async (req, res) => {
   const id = param(req, 'id');
   const password = tempPassword();
-  await prisma.user.update({ where: { id }, data: { passwordHash: await bcrypt.hash(password, 10), mustChangePassword: true, tokenVersion: { increment: 1 }, failedLogins: 0, lockedUntil: null } });
+  const u = await prisma.user.update({ where: { id }, data: { passwordHash: await bcrypt.hash(password, 10), mustChangePassword: true, tokenVersion: { increment: 1 }, failedLogins: 0, lockedUntil: null } });
   disconnectUser(id);
   audit(currentUser(req).id, 'user.reset_password', 'User', id);
-  res.json({ temporaryPassword: password });
+  const { token, expiresAt } = await issuePasswordToken(id, 'reset', 86_400_000);
+  await queueEmails([{ user: u, kind: 'password_reset', data: { token, expiresAt: expiresAt.toISOString() } }]);
+  res.json({ temporaryPassword: password, emailed: true });
 });
 
 /** Bulk candidate import: CSV text or JSON array. dryRun=true returns a validation preview. */
@@ -140,6 +157,7 @@ usersRouter.post('/import', requireRole('ADMIN', 'EXAMINER'), async (req, res) =
   if (body.dryRun) return res.json({ total: rows.length, valid: valid.length, invalid: rows.length - valid.length, results });
 
   const created: { name: string; email: string; temporaryPassword: string }[] = [];
+  const createdUsers: { id: string; email: string; name: string; role: string }[] = [];
   // hash outside the transaction (bcrypt is the slow part) so large imports don't hit the transaction timeout
   const prepared = await Promise.all(
     valid.map(async (r) => {
@@ -154,11 +172,18 @@ usersRouter.post('/import', requireRole('ADMIN', 'EXAMINER'), async (req, res) =
         const u = await tx.user.create({ data: { name: d.name, email: d.email, role: 'CANDIDATE', groupName: d.group || null, passwordHash: hash, mustChangePassword: true } });
         if (body.enrollExamId) await tx.enrollment.create({ data: { examId: body.enrollExamId, candidateId: u.id } });
         created.push({ name: d.name, email: d.email, temporaryPassword: pw });
+        createdUsers.push({ id: u.id, email: u.email, name: u.name, role: u.role });
       }
     },
     { timeout: 120_000, maxWait: 10_000 },
   );
   audit(currentUser(req).id, 'user.import', 'User', null, { count: created.length });
+  await sendWelcome(createdUsers, currentUser(req).name);
+  if (body.enrollExamId) {
+    const exam = await prisma.exam.findUnique({ where: { id: body.enrollExamId } });
+    if (exam?.status === 'PUBLISHED' && createdUsers.length)
+      await queueExamEmail(exam.id, createdUsers.map((u) => u.id), examPhase(exam) === 'ONGOING' ? 'exam_open' : 'exam_scheduled', (u) => (examPhase(exam) === 'ONGOING' ? `open:${exam.id}:${u}` : `scheduled:${exam.id}:${u}:${exam.publishedAt?.getTime()}`));
+  }
   res.json({ total: rows.length, created: created.length, skipped: rows.length - created.length, credentials: created, results });
 });
 

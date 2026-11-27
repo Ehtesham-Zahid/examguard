@@ -226,7 +226,7 @@ export default function AdminUsers() {
         {secret && (
           <div className="space-y-3">
             <p className="text-sm text-ink-2">
-              Share this with <strong className="text-ink">{secret.user.name}</strong> through a trusted channel.
+              We emailed <strong className="text-ink">{secret.user.name}</strong> a one-time link to choose a new password. If email can’t reach them, share this temporary password through a trusted channel instead.
             </p>
             <SecretReveal label="Temporary password" value={secret.password} />
           </div>

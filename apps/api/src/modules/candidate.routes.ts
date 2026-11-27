@@ -12,6 +12,7 @@ import { recordEvents } from '../services/integrity.service.js';
 import { emitToMonitors } from '../core/realtime.js';
 import { audit } from '../core/audit.js';
 import { notify } from '../core/notify.js';
+import { queueForUsers } from '../services/email/outbox.js';
 import { finalAnswerScore } from '../domain/marking.js';
 
 export const candidateRouter = Router();
@@ -438,6 +439,7 @@ candidateRouter.post('/attempts/:id/disputes', requireRole('CANDIDATE'), async (
   const d = await prisma.dispute.create({ data: { attemptId: attempt.id, attemptQuestionId: body.questionId ?? null, raisedById: me.id, category: body.category, message: body.message, scoreBefore: attempt.score } });
   audit(me.id, 'dispute.open', 'Dispute', d.id, { attemptId: attempt.id, category: body.category });
   await notify([attempt.exam.ownerId], 'New result dispute', `${me.name} raised a dispute on ${attempt.exam.title}`, `/examiner/disputes`);
+  await queueForUsers([attempt.exam.ownerId], 'dispute_raised', { title: attempt.exam.title, candidateName: me.name, reason: body.message.slice(0, 400) }, (u) => `dispute-raised:${d.id}:${u}`);
   res.status(201).json(d);
 });
 

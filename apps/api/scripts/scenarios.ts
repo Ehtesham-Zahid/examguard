@@ -2,8 +2,55 @@
  * Scenario tests for flows that need clock manipulation or multiple devices.
  * Run against a freshly seeded, DEDICATED database (it rewrites timestamps directly):
  *   DATABASE_URL=... API=http://localhost:4300/api npx tsx scripts/scenarios.ts
+ * The API must point its email at the in-process SMTP sink this script starts (real delivery end to end):
+ *   SMTP_HOST=localhost SMTP_PORT=2526 SMTP_USER=sink SMTP_PASS=sink EMAIL_ALLOW_TEST_DOMAINS=true
  */
 import { PrismaClient } from '@prisma/client';
+import { SMTPServer } from 'smtp-server';
+
+/* ---- in-process SMTP sink: every email the API sends lands here */
+const inbox: { to: string[]; raw: string; at: number }[] = [];
+let sink: SMTPServer;
+/** While true the sink answers like a briefly unavailable provider (421 = try again later). */
+let sinkDown = false;
+function startSink() {
+  sink = new SMTPServer({
+    onRcptTo(_addr, _s, cb) {
+      if (!sinkDown) return cb();
+      const e = Object.assign(new Error('Service temporarily unavailable'), { responseCode: 421 });
+      cb(e);
+    },
+    authOptional: true,
+    allowInsecureAuth: true,
+    disabledCommands: ['STARTTLS'],
+    logger: false,
+    onAuth: (a, _s, cb) => cb(null, { user: a.username }),
+    onData(stream, session, cb) {
+      let raw = '';
+      stream.on('data', (c: Buffer) => (raw += c.toString('utf8')));
+      stream.on('end', () => {
+        inbox.push({ to: session.envelope.rcptTo.map((r) => r.address), raw, at: Date.now() });
+        cb();
+      });
+    },
+  });
+  return new Promise<void>((r) => sink.listen(Number(process.env.SINK_PORT ?? 2526), r));
+}
+/** Decode quoted-printable and base64 MIME parts so assertions can read links and headers. */
+function decodeMail(raw: string) {
+  const qp = Buffer.from(raw.replace(/=\r?\n/g, '').replace(/=([0-9A-F]{2})/g, (_m, h) => String.fromCharCode(parseInt(h, 16))), 'latin1').toString('utf8');
+  const b64 = [...raw.matchAll(/Content-Transfer-Encoding: base64\r?\n(?:[^\r\n]+\r?\n)*?\r?\n([A-Za-z0-9+/=\r\n]+)/g)].map((m) => Buffer.from(m[1].replace(/\s+/g, ''), 'base64').toString('utf8'));
+  return [qp, ...b64].join('\n');
+}
+const mailFor = (to: string, kind: string) => inbox.filter((m) => m.to.includes(to) && new RegExp(`^X-ExamGuard-Email: ${kind}\\r?$`, 'im').test(m.raw));
+async function waitFor<T>(fn: () => Promise<T> | T, ms = 12_000): Promise<T> {
+  const end = Date.now() + ms;
+  for (;;) {
+    const v = await fn();
+    if (v || Date.now() > end) return v;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+}
 
 const prisma = new PrismaClient();
 const BASE = process.env.API ?? 'http://localhost:4300/api';
@@ -41,6 +88,7 @@ async function newLiveExam(examiner: string, title: string, settings: Record<str
 }
 
 async function main() {
+  await startSink();
   const examiner = await login('examiner@examguard.test', 'Examiner@123');
   const admin = await login('admin@examguard.test', 'Admin@123');
 
@@ -393,6 +441,106 @@ async function main() {
     ok((await call('POST', `/candidate/exams/${id2}/start`, await login('student10@examguard.test'), {}, dev('LJ'))).status === 201, 'paused time extends the late-entry cutoff');
   }
 
+
+  // ---------- 15. email system (outbox → worker → real SMTP delivery into the sink)
+  {
+    const studentId = (await prisma.user.findUniqueOrThrow({ where: { email: 'student5@examguard.test' } })).id;
+    // (a) publishing a live exam emails "open now" to every enrolled candidate, delivered over SMTP
+    const live = await newLiveExam(examiner, 'E1 email live');
+    // the worker paces itself (Gmail-safe rate), so allow time for anything queued earlier in the run
+    const delivered = await waitFor(async () => (await prisma.emailOutbox.count({ where: { kind: 'exam_open', dedupeKey: { startsWith: `open:${live}:` }, status: 'SENT' } })) >= 3, 90_000);
+    ok(delivered, 'live publish → "exam open" emails delivered over SMTP');
+    ok(mailFor('student5@examguard.test', 'exam_open').length >= 1, 'sink received the exam-open email for the candidate');
+
+    // (b) a future exam sends "scheduled" with a calendar invite
+    const now = Date.now();
+    const fut = await call('POST', '/exams', examiner, { title: 'E2 email future', instructions: 'x', windowStart: new Date(now + 3 * 86400_000).toISOString(), windowEnd: new Date(now + 3 * 86400_000 + 3 * 3600_000).toISOString(), durationMin: 45, settings: { requireFullscreen: false } });
+    const qs = ((await call('GET', '/questions', examiner)).json as any[]).filter((q) => q.type === 'SINGLE').slice(0, 3);
+    await call('PUT', `/exams/${fut.json.id}/questions`, examiner, { questionIds: qs.map((q) => q.id) });
+    await call('POST', `/exams/${fut.json.id}/enrollments`, examiner, { candidateIds: [studentId] });
+    ok((await call('POST', `/exams/${fut.json.id}/publish`, examiner)).status === 200, 'future exam published');
+    const sched = await waitFor(() => mailFor('student5@examguard.test', 'exam_scheduled').find((m) => decodeMail(m.raw).includes('E2 email future')));
+    ok(!!sched && /text\/calendar/.test(sched.raw) && decodeMail(sched.raw).includes('BEGIN:VCALENDAR'), 'scheduled email carries an .ics calendar invite');
+    ok(!!sched && decodeMail(sched.raw).includes('Pakistan Standard Time'), 'times in the email name the time zone');
+
+    // (c) exactly once: re-enrolling or re-running the scheduler never duplicates
+    await call('POST', `/exams/${fut.json.id}/enrollments`, examiner, { candidateIds: [studentId] });
+    ok((await prisma.emailOutbox.count({ where: { kind: 'exam_scheduled', userId: studentId, dedupeKey: { startsWith: `scheduled:${fut.json.id}:` } } })) === 1, 're-enrolment does not send a second "scheduled" email');
+
+    // (d) 24h reminder from the scheduler (skips people told in the last 12h; deduped across runs)
+    const { scheduleExamEmails } = await import('../src/services/email/outbox.js');
+    await prisma.exam.update({ where: { id: fut.json.id }, data: { windowStart: new Date(now + 20 * 3600_000), windowEnd: new Date(now + 23 * 3600_000), publishedAt: new Date(now - 13 * 3600_000) } });
+    await prisma.emailOutbox.updateMany({ where: { dedupeKey: { startsWith: `scheduled:${fut.json.id}:` } }, data: { createdAt: new Date(now - 13 * 3600_000) } });
+    await scheduleExamEmails();
+    await scheduleExamEmails();
+    ok((await prisma.emailOutbox.count({ where: { kind: 'exam_reminder', dedupeKey: `reminder:${fut.json.id}:${studentId}` } })) === 1, 'scheduler queues one 24h reminder (idempotent across runs)');
+    await scheduleExamEmails();
+    ok((await prisma.emailOutbox.count({ where: { kind: 'exam_open', dedupeKey: { startsWith: `open:${live}:` } } })) === (await prisma.enrollment.count({ where: { examId: live } })), '"open" emails from publish and scheduler are not duplicated');
+
+    // (e) opt-out: candidate turns exam emails off → recorded as skipped, never delivered
+    const s5 = await login('student5@examguard.test');
+    ok((await call('PUT', '/auth/prefs', s5, { emailExams: false })).status === 200, 'candidate can turn exam emails off');
+    const optExam = await newLiveExam(examiner, 'E3 email optout');
+    const row = await waitFor(() => prisma.emailOutbox.findFirst({ where: { userId: studentId, dedupeKey: `open:${optExam}:${studentId}` } }));
+    ok(row?.status === 'SKIPPED' && /turned this type/.test(row.lastError ?? ''), 'opted-out email is skipped with a reason');
+    await call('PUT', '/auth/prefs', s5, { emailExams: true });
+
+    // (f) forgot password: same answer for unknown accounts, single-use link, old password stops working
+    const unknown = await call('POST', '/auth/password/forgot', undefined, { email: 'nobody-here@examguard.test' });
+    const known = await call('POST', '/auth/password/forgot', undefined, { email: 'student6@examguard.test' });
+    ok(unknown.status === 200 && known.status === 200 && JSON.stringify(unknown.json) === JSON.stringify(known.json), 'forgot-password does not reveal which emails exist');
+    const fmail = await waitFor(() => mailFor('student6@examguard.test', 'password_forgot')[0]);
+    const token = fmail && decodeMail(fmail.raw).match(/reset-password\?token=([A-Za-z0-9_-]{30,})/)?.[1];
+    ok(!!token, 'reset email delivered with a link');
+    const info = await call('GET', `/auth/password/token?token=${token}`);
+    ok(info.json.valid === true && info.json.purpose === 'forgot' && !String(info.json.email).includes('student6'), 'link validates and masks the address');
+    await waitFor(async () => (await prisma.emailOutbox.findFirst({ where: { to: 'student6@examguard.test', kind: 'password_forgot' } }))?.status === 'SENT');
+    const stored = await prisma.emailOutbox.findFirst({ where: { to: 'student6@examguard.test', kind: 'password_forgot' } });
+    ok((stored?.data as any)?.token === null, 'token is removed from the email log after delivery');
+    ok((await call('POST', '/auth/password/reset', undefined, { token, password: 'short' })).status === 400, 'weak password rejected');
+    ok((await call('POST', '/auth/password/reset', undefined, { token, password: 'NewPass@2026' })).status === 200, 'password reset with the link');
+    ok((await call('POST', '/auth/password/reset', undefined, { token, password: 'Another@2026' })).status === 400, 'link cannot be reused');
+    ok((await call('POST', '/auth/login', undefined, { email: 'student6@examguard.test', password: 'Student@123' })).status === 401, 'old password no longer works');
+    ok((await call('POST', '/auth/login', undefined, { email: 'student6@examguard.test', password: 'NewPass@2026' })).status === 200, 'new password works');
+    ok(!!(await waitFor(() => mailFor('student6@examguard.test', 'password_changed')[0])), 'password-changed security alert delivered');
+
+    // (g) admin creates a user → welcome email with a set-password link
+    const created = await call('POST', '/users', admin, { name: 'Mail Welcome', email: 'welcome.user@examguard.test', role: 'CANDIDATE' });
+    ok(created.status === 201 && created.json.emailed === true, 'account created and welcome email queued');
+    const wmail = await waitFor(() => mailFor('welcome.user@examguard.test', 'welcome')[0]);
+    const wtoken = wmail && decodeMail(wmail.raw).match(/reset-password\?token=([A-Za-z0-9_-]{30,})/)?.[1];
+    ok((await call('GET', `/auth/password/token?token=${wtoken}`)).json.purpose === 'welcome', 'welcome link is a "set your password" link');
+    ok((await call('POST', '/auth/password/reset', undefined, { token: wtoken, password: 'Welcome@2026' })).status === 200, 'new user sets their own password from the email');
+
+    // (h) admin email log: list, preview, test email, retry rules
+    const log = await call('GET', '/admin/emails?pageSize=5', admin);
+    ok(log.status === 200 && log.json.counts.SENT > 0 && log.json.config.configured === true, 'admin email log lists emails with status counts');
+    ok((await call('GET', '/admin/emails', examiner)).status === 403, 'email log is admin-only');
+    const prev = await call('GET', `/admin/emails/${stored!.id}`, admin);
+    ok(prev.status === 200 && prev.json.html.includes('<!doctype html>') && prev.json.linkRedacted === true, 'preview renders the email (link redacted)');
+    ok((await call('POST', `/admin/emails/${stored!.id}/retry`, admin)).status === 409, 'a delivered one-time link cannot be resent');
+    const test = await call('POST', '/admin/emails/test', admin, { to: 'ops@examguard.test' });
+    ok(test.status === 201 && !!(await waitFor(() => mailFor('ops@examguard.test', 'test')[0])), 'test email delivered end to end');
+
+    // (i) SMTP outage: the email is retried with backoff and delivered once the server is back
+    sinkDown = true;
+    const t2 = await call('POST', '/admin/emails/test', admin, { to: 'retry@examguard.test' });
+    const failed = await waitFor(async () => {
+      const r = await prisma.emailOutbox.findUnique({ where: { id: t2.json.id } });
+      return r && r.status === 'PENDING' && r.attempts >= 1 && r.lastError ? r : null;
+    });
+    ok(!!failed, 'SMTP temporarily down (421) → email stays queued for retry with the error recorded');
+    sinkDown = false;
+    await prisma.emailOutbox.update({ where: { id: t2.json.id }, data: { sendAfter: new Date() } });
+    await call('POST', '/admin/emails/test', admin, { to: 'kick@examguard.test' }); // nudges the worker
+    ok(!!(await waitFor(() => mailFor('retry@examguard.test', 'test')[0], 20_000)), 'retried and delivered after SMTP recovers');
+
+    // (j) results published earlier in this run produced result emails with the certificate code
+    const res = await prisma.emailOutbox.findFirst({ where: { kind: 'results_published' } });
+    ok(!!res && !!(res.data as any).certificateCode, 'results-published emails carry the certificate verification code');
+    ok(!/\d+\s*\/\s*\d+\s*marks/i.test(prev.json.text), 'no score in email bodies');
+  }
+
   // ---------- 14. audit chain survives everything above
   await sleep(800);
   const chain = (await call('GET', '/users/admin/overview', admin)).json.auditChain;
@@ -400,6 +548,7 @@ async function main() {
 
   console.log(failures ? `\n${failures} FAILED` : '\nALL SCENARIOS PASSED');
   await prisma.$disconnect();
+  sink.close();
   process.exit(failures ? 1 : 0);
 }
 main();

@@ -7,6 +7,9 @@ export interface Prefs {
   paletteSide?: 'left' | 'right' | 'hidden';
   layout?: 'single' | 'scroll';
   reduceMotion?: boolean;
+  emailExams?: boolean;
+  emailResults?: boolean;
+  emailDisputes?: boolean;
 }
 export interface User {
   id: string;

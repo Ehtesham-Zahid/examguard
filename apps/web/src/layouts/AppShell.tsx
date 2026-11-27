@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bell, BookOpen, ClipboardCheck, FileQuestion, Gavel, GraduationCap, LayoutDashboard, LogOut, Menu, Moon, ScrollText, Search, Settings, ShieldCheck, Sun, Users, X } from 'lucide-react';
+import { Bell, BookOpen, ClipboardCheck, FileQuestion, Gavel, GraduationCap, LayoutDashboard, LogOut, Menu, Moon, ScrollText, Search, Settings, ShieldCheck, Sun, Users, X, Mail } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import ClickSpark from '@/components/bits/ClickSpark';
@@ -24,6 +24,7 @@ const NAV: Record<Role, NavItem[]> = {
     { to: '/examiner/exams', label: 'All examinations', icon: <ClipboardCheck className="size-4" /> },
     { to: '/examiner/questions', label: 'Question bank', icon: <FileQuestion className="size-4" /> },
     { to: '/examiner/disputes', label: 'Disputes', icon: <Gavel className="size-4" /> },
+    { to: '/admin/emails', label: 'Email log', icon: <Mail className="size-4" /> },
     { to: '/admin/audit', label: 'Audit log', icon: <ScrollText className="size-4" /> },
   ],
   EXAMINER: [

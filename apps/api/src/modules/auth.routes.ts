@@ -9,6 +9,7 @@ import { parseBody } from '../core/validate.js';
 import { config } from '../core/config.js';
 import { audit } from '../core/audit.js';
 import { disconnectUser } from '../core/realtime.js';
+import { hashToken, issuePasswordToken, queueEmails } from '../services/email/outbox.js';
 
 export const authRouter = Router();
 const COOKIE = 'eg_refresh';
@@ -116,7 +117,60 @@ authRouter.post('/change-password', authenticate, async (req, res) => {
   });
   setRefresh(res, signRefreshToken(updated));
   audit(user.id, 'auth.password_changed', 'User', user.id);
+  await queueEmails([{ user: updated, kind: 'password_changed', data: { at: new Date().toISOString() } }]);
   res.json({ accessToken: signAccessToken(updated), user: publicUser(updated) });
+});
+
+/* ------------------------------------------------ password links (welcome, admin reset, forgot) */
+const FORGOT_TTL = 60 * 60_000;
+// 5 requests / 15 min per IP + address: enough for a typo, useless for mail-bombing someone
+const forgotLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 5, keyGenerator: (req) => `${ipKeyGenerator(req.ip ?? '')}:${String(req.body?.email ?? '').toLowerCase()}`, standardHeaders: true, legacyHeaders: false, message: { error: { code: 'RATE_LIMIT', message: 'Too many reset requests — try again in a few minutes' } } });
+
+/** Always answers the same way, so it can't be used to discover which emails have accounts. */
+authRouter.post('/password/forgot', forgotLimiter, async (req, res) => {
+  const { email } = parseBody(z.object({ email: z.string().trim().toLowerCase().email('Enter a valid email address') }), req);
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (user && user.status === 'ACTIVE') {
+    const recent = await prisma.passwordToken.findFirst({ where: { userId: user.id, purpose: 'forgot', createdAt: { gt: new Date(Date.now() - 60_000) } } });
+    if (!recent) {
+      const { token, expiresAt } = await issuePasswordToken(user.id, 'forgot', FORGOT_TTL);
+      await queueEmails([{ user, kind: 'password_forgot', data: { token, expiresAt: expiresAt.toISOString() } }]);
+      audit(user.id, 'auth.password_forgot', 'User', user.id, { ip: req.ip });
+    }
+  }
+  res.json({ ok: true });
+});
+
+async function findToken(raw: string) {
+  const t = await prisma.passwordToken.findUnique({ where: { tokenHash: hashToken(raw) }, include: { user: true } });
+  if (!t || t.usedAt || t.expiresAt < new Date() || t.user.status !== 'ACTIVE') return null;
+  return t;
+}
+const maskEmail = (e: string) => e.replace(/^(.)(.*)(.@.*)$/, (_m, a: string, b: string, c: string) => a + '•'.repeat(Math.min(6, b.length)) + c);
+
+authRouter.get('/password/token', async (req, res) => {
+  const raw = String(req.query.token ?? '');
+  const t = raw.length >= 20 && raw.length <= 200 ? await findToken(raw) : null;
+  if (!t) return res.json({ valid: false });
+  res.json({ valid: true, purpose: t.purpose, name: t.user.name.split(' ')[0], email: maskEmail(t.user.email), expiresAt: t.expiresAt });
+});
+
+authRouter.post('/password/reset', forgotLimiter, async (req, res) => {
+  const { token, password } = parseBody(z.object({ token: z.string().min(20).max(200), password: passwordSchema }), req);
+  const t = await findToken(token);
+  if (!t) throw badRequest('This link has expired or was already used. Request a new one.');
+  // claim the token atomically so two tabs can't both use it
+  const claimed = await prisma.passwordToken.updateMany({ where: { id: t.id, usedAt: null }, data: { usedAt: new Date() } });
+  if (claimed.count !== 1) throw badRequest('This link has expired or was already used. Request a new one.');
+  const updated = await prisma.user.update({
+    where: { id: t.userId },
+    data: { passwordHash: await bcrypt.hash(password, 10), mustChangePassword: false, tokenVersion: { increment: 1 }, failedLogins: 0, lockedUntil: null },
+  });
+  await prisma.passwordToken.updateMany({ where: { userId: t.userId, usedAt: null }, data: { usedAt: new Date() } });
+  disconnectUser(updated.id);
+  audit(updated.id, t.purpose === 'welcome' ? 'auth.password_set' : 'auth.password_reset', 'User', updated.id, { ip: req.ip });
+  if (t.purpose !== 'welcome') await queueEmails([{ user: updated, kind: 'password_changed', data: { at: new Date().toISOString() } }]);
+  res.json({ ok: true, email: updated.email });
 });
 
 const prefsSchema = z
@@ -129,6 +183,9 @@ const prefsSchema = z
     layout: z.enum(['single', 'scroll']).optional(),
     reduceMotion: z.boolean().optional(),
     language: z.enum(['en', 'ur']).optional(),
+    emailExams: z.boolean().optional(),
+    emailResults: z.boolean().optional(),
+    emailDisputes: z.boolean().optional(),
   })
   .strict();
 

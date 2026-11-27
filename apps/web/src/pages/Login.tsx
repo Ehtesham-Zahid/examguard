@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowRight, BadgeCheck, CloudOff, Scale, ShieldCheck } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { errMsg } from '@/lib/api';
@@ -102,6 +102,11 @@ export default function Login() {
             <Field label="Email" error={errors.email} required>
               {(id) => <Input id={id} type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} invalid={!!errors.email} placeholder="you@university.edu" />}
             </Field>
+            <div className="-mb-2 flex justify-end">
+              <Link to="/forgot-password" className="text-[13px] font-medium text-ink-2 underline-offset-2 hover:text-ink hover:underline">
+                Forgot password?
+              </Link>
+            </div>
             <Field label="Password" error={errors.password} required>
               {(id) => <Input id={id} type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} invalid={!!errors.password} />}
             </Field>

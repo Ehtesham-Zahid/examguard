@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { KeyRound, LogOut, Palette } from 'lucide-react';
+import { KeyRound, LogOut, Mail, Palette } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { api, errMsg, setAccessToken } from '@/lib/api';
 import type { Prefs, User } from '@/lib/types';
@@ -48,6 +48,47 @@ export function PreferenceControls({ prefs, onChange, compact }: { prefs: Prefs;
         <Toggle checked={!!prefs.reduceMotion} onChange={(v) => onChange({ reduceMotion: v })} label="Reduce motion" description="Turns off animations and transitions." />
       </div>
     </div>
+  );
+}
+
+/** Per-category email opt-outs; account & security emails are always sent. */
+function EmailPreferences() {
+  const { user, setUser } = useAuth();
+  const [saving, setSaving] = useState<string | null>(null);
+  if (!user) return null;
+  const prefs = user.prefs ?? {};
+  const candidate = user.role === 'CANDIDATE';
+  const items: { key: 'emailExams' | 'emailResults' | 'emailDisputes'; label: string; description: string }[] = candidate
+    ? [
+        { key: 'emailExams', label: 'Exam schedule & reminders', description: 'When you’re enrolled (with a calendar invite), a reminder the day before, and when the exam opens.' },
+        { key: 'emailResults', label: 'Results', description: 'When your results are published or a score changes after a review.' },
+        { key: 'emailDisputes', label: 'Dispute decisions', description: 'When your examiner decides a dispute you raised.' },
+      ]
+    : [{ key: 'emailDisputes', label: 'New result disputes', description: 'When a candidate disputes a result on one of your exams.' }];
+  const set = async (key: (typeof items)[number]['key'], v: boolean) => {
+    setSaving(key);
+    try {
+      const r = await api<{ prefs: Prefs }>('/auth/prefs', { method: 'PUT', body: { [key]: v } });
+      setUser({ ...user, prefs: r.prefs });
+      toast.success(v ? 'Emails turned on' : 'Emails turned off');
+    } catch (e) {
+      toast.error(errMsg(e));
+    } finally {
+      setSaving(null);
+    }
+  };
+  return (
+    <Card className="mb-6">
+      <CardHeader title={<span className="flex items-center gap-2"><Mail className="size-4" /> Email notifications</span>} subtitle={<>Sent to <strong className="text-ink">{user.email}</strong>. You’ll always see these in the app’s notification bell too.</>} />
+      <div className="divide-y divide-line px-5">
+        {items.map((i) => (
+          <div key={i.key} className={cx('py-4', saving === i.key && 'opacity-70')}>
+            <Toggle checked={prefs[i.key] !== false} disabled={saving === i.key} onChange={(v) => set(i.key, v)} label={i.label} description={i.description} />
+          </div>
+        ))}
+        <p className="py-4 text-[13px] text-muted">Account and security emails — welcome links, password resets and password-change alerts — are always sent.</p>
+      </div>
+    </Card>
   );
 }
 
@@ -106,6 +147,7 @@ export default function Settings() {
           </div>
         </Card>
       )}
+      {!force && <EmailPreferences />}
       <Card className="mb-6">
         <CardHeader title={<span className="flex items-center gap-2"><KeyRound className="size-4" /> Change password</span>} />
         <form onSubmit={change} className="grid gap-4 p-5 sm:grid-cols-3" noValidate>

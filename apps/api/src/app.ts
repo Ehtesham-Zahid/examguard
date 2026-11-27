@@ -16,6 +16,7 @@ import { examsRouter } from './modules/exams.routes.js';
 import { candidateRouter } from './modules/candidate.routes.js';
 import { staffRouter } from './modules/staff.routes.js';
 import { reportsRouter, verifyRouter } from './modules/reports.routes.js';
+import { emailsRouter } from './modules/emails.routes.js';
 
 export function createApp() {
   const app = express();
@@ -58,6 +59,7 @@ export function createApp() {
   app.use('/api/staff', staffRouter);
   app.use('/api/reports', reportsRouter);
   app.use('/api/verify', verifyRouter);
+  app.use('/api/admin/emails', emailsRouter);
   app.use('/api', (_req, res) => res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Endpoint not found' } }));
   app.use(errorHandler);
 

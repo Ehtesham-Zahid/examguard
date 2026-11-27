@@ -116,6 +116,8 @@ model User {
   attempts       Attempt[]
   notifications  Notification[]
   disputes       Dispute[]      @relation("DisputeRaiser")
+  emails         EmailOutbox[]
+  passwordTokens PasswordToken[]
 }
 
 model Topic {
@@ -427,4 +429,51 @@ model AuditLog {
   createdAt DateTime @default(now())
 
   @@index([entity, entityId])
+}
+
+/// Transactional email outbox: rows are written alongside the event and delivered by a background worker
+/// (retries with backoff, exactly-once via dedupeKey). Content is rendered from `data` at send/preview time.
+model EmailOutbox {
+  id        String      @id @default(cuid())
+  userId    String?
+  user      User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  to        String
+  kind      String
+  category  String      @default("account")
+  subject   String
+  data      Json        @default("{}")
+  dedupeKey String?     @unique
+  status    EmailStatus @default(PENDING)
+  attempts  Int         @default(0)
+  lastError String?
+  messageId String?
+  sendAfter DateTime    @default(now())
+  sentAt    DateTime?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([status, sendAfter])
+  @@index([createdAt])
+}
+
+enum EmailStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
+/// One-time links for setting / resetting a password (only the SHA-256 of the token is stored).
+model PasswordToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  purpose   String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
 }

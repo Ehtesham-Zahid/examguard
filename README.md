@@ -55,6 +55,29 @@ The smoke test covers RBAC, ownership isolation, lifecycle rules, time windows, 
 
 `render.yaml` is a one-click Render Blueprint (free Postgres plus one web service). In production the API also serves the built React app from the **same origin**, so cookies, CORS and WebSockets need no extra configuration. A `Dockerfile` is included for any container host.
 
+### Email notifications
+
+ExamGuard emails candidates and staff through **Gmail SMTP with a Google App Password**:
+
+| Email | Who | When |
+|---|---|---|
+| Exam scheduled (+ calendar invite `.ics`) | Candidates | Exam published, or enrolled into a published exam |
+| Reminder | Candidates | ~24 h before the window opens |
+| Exam open | Candidates who haven't started | When the window opens |
+| Exam reopened | Candidate | Examiner restores time after an outage |
+| Result ready (+ certificate code) | Candidates | Results published — the score itself is never in the email |
+| Score updated | Candidates | A dispute re-grades a question for everyone |
+| Dispute decided / new dispute | Candidate / examiner | Dispute resolved / raised |
+| Welcome, password reset, forgot password, password changed | Anyone | Account created or imported, admin reset, self-service reset, password changed |
+
+* **Reliable delivery:** emails go into a database outbox in the same request as the event; a background worker sends them with retries and exponential backoff. A `dedupeKey` makes each email exactly-once, so a double-click or a second server can't send it twice.
+* **Safe links:** password links are single-use, expire (1 h for "forgot", 24 h for admin reset, 7 days for welcome), only their SHA-256 is stored, and the link is removed from the log after delivery. "Forgot password" answers the same way for unknown emails and is rate-limited.
+* **Preferences:** candidates can turn off exam, result and dispute emails in Settings; account and security emails are always sent.
+* **Admin → Email log:** every email with a pixel-exact preview (designed and plain-text), status, errors, retry, and a "send a test email" box.
+* **Demo accounts** use the reserved `examguard.test` domain, which can never receive mail, so their emails are shown as *Not sent* (open them to preview).
+
+**Turning it on:** enable 2-Step Verification on the Google account, create an App Password at <https://myaccount.google.com/apppasswords>, then set `SMTP_USER` (the Gmail address) and `SMTP_PASS` (the App Password) in `apps/api/.env` locally or in Render → Environment. Optional: `EMAIL_FROM`, `SMTP_PORT` (465 or 587), `EMAIL_TIMEZONE`. Send yourself a test from Admin → Email log.
+
 ---
 
 ## Requirement coverage
