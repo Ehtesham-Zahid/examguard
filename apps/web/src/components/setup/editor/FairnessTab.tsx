@@ -68,7 +68,7 @@ export function FairnessTab({ exam }: { exam: ExamDetail }) {
               )}
             </h2>
             <p className="mt-2 max-w-xl text-sm text-ink-2">
-              Instead of drawing questions blindly, ExamGuard balances each paper against how hard every question has proven to be, so no one is unlucky enough to draw all the tough ones — while papers still differ enough to make copying pointless.
+              Instead of drawing questions blindly, Examify balances each paper against how hard every question has proven to be, so no one is unlucky enough to draw all the tough ones — while papers still differ enough to make copying pointless.
             </p>
           </div>
           <div className="flex flex-col justify-center gap-3 border-t border-line bg-surface-2/50 p-6 md:border-l md:border-t-0">
@@ -102,10 +102,10 @@ export function FairnessTab({ exam }: { exam: ExamDetail }) {
                   contentStyle={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10, color: 'var(--ink)', fontSize: 13 }}
                   labelStyle={{ color: 'var(--muted)' }}
                   labelFormatter={(l) => `Paper ${l}`}
-                  formatter={(v, name) => [`${v}%`, name === 'fair' ? 'ExamGuard fair' : 'Naive random']}
+                  formatter={(v, name) => [`${v}%`, name === 'fair' ? 'Examify fair' : 'Naive random']}
                   cursor={{ stroke: 'var(--line-strong)' }}
                 />
-                <Legend verticalAlign="top" height={28} iconType="plainline" formatter={(v) => <span style={{ color: 'var(--ink-2)', fontSize: 13 }}>{v === 'fair' ? 'ExamGuard fair' : 'Naive random'}</span>} />
+                <Legend verticalAlign="top" height={28} iconType="plainline" formatter={(v) => <span style={{ color: 'var(--ink-2)', fontSize: 13 }}>{v === 'fair' ? 'Examify fair' : 'Naive random'}</span>} />
                 <ReferenceLine y={d.target} stroke="var(--ink-2)" strokeDasharray="4 4" label={{ value: `target ${d.target}%`, position: 'insideBottomLeft', fill: 'var(--ink-2)', fontSize: 12 }} />
                 <Line type="monotone" dataKey="naive" stroke="var(--muted)" strokeWidth={2} strokeDasharray="5 3" dot={false} activeDot={{ r: 4 }} isAnimationActive={false} />
                 <Line type="monotone" dataKey="fair" stroke="var(--accent)" strokeWidth={2.5} dot={false} activeDot={{ r: 5, stroke: 'var(--surface)', strokeWidth: 2 }} isAnimationActive={false} />

@@ -49,7 +49,7 @@ export default function ForgotPassword() {
           </span>
           <h1 className="display text-[28px] font-bold">Check your inbox</h1>
           <p className="mt-2 text-[15px] text-ink-2">
-            If <strong className="text-ink">{email.trim()}</strong> has an ExamGuard account, a link to reset the password is on its way. It works once and expires in 1 hour.
+            If <strong className="text-ink">{email.trim()}</strong> has an Examify account, a link to reset the password is on its way. It works once and expires in 1 hour.
           </p>
           <p className="mt-4 text-sm text-muted">Nothing after a few minutes? Check spam, or ask your administrator to reset it for you.</p>
           <Button variant="outline" className="mt-6 w-full" onClick={() => setSent(false)}>

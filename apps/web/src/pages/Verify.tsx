@@ -65,7 +65,7 @@ export default function Verify() {
                 <StatusMark status={res.valid ? 'done' : 'failed'} size={36} strokeWidth={2.6} color="currentColor" doneColor="currentColor" errorColor="currentColor" drawDuration={0.6} />
                 <div>
                   <div className="font-semibold">{res.valid ? 'Authentic report' : 'Could not verify'}</div>
-                  <div className="text-sm opacity-90">{res.valid ? 'Signature valid — issued by ExamGuard and unmodified.' : res.reason}</div>
+                  <div className="text-sm opacity-90">{res.valid ? 'Signature valid — issued by Examify and unmodified.' : res.reason}</div>
                 </div>
               </div>
               {res.payload && (

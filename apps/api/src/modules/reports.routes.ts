@@ -20,13 +20,13 @@ const ACCENT = '#4338ca';
 const LINE = '#e2e8f0';
 
 function startDoc(res: Response, filename: string) {
-  const doc = new PDFDocument({ size: 'A4', margin: 48, bufferPages: true, info: { Title: filename, Producer: 'ExamGuard' } });
+  const doc = new PDFDocument({ size: 'A4', margin: 48, bufferPages: true, info: { Title: filename, Producer: 'Examify' } });
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
   res.setHeader('Cache-Control', 'no-store');
   doc.pipe(res);
   doc.rect(0, 0, doc.page.width, 6).fill(ACCENT);
-  doc.fillColor(ACCENT).font('Helvetica-Bold').fontSize(11).text('EXAMGUARD', 48, 28, { characterSpacing: 2 });
+  doc.fillColor(ACCENT).font('Helvetica-Bold').fontSize(11).text('EXAMIFY', 48, 28, { characterSpacing: 2 });
   doc.fillColor(MUTED).font('Helvetica').fontSize(9).text('Secure Examination Management System', 48, 42);
   doc.moveDown(2);
   return doc;

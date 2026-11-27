@@ -2,16 +2,16 @@ services:
   db:
     image: postgres:16
     environment:
-      POSTGRES_USER: examguard
-      POSTGRES_PASSWORD: examguard
-      POSTGRES_DB: examguard
+      POSTGRES_USER: examify
+      POSTGRES_PASSWORD: examify
+      POSTGRES_DB: examify
     ports: ["5432:5432"]
     volumes: [pgdata:/var/lib/postgresql/data]
   app:
     build: .
     depends_on: [db]
     environment:
-      DATABASE_URL: postgresql://examguard:examguard@db:5432/examguard
+      DATABASE_URL: postgresql://examify:examify@db:5432/examify
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET to a long random string}
       CLIENT_ORIGIN: http://localhost:4000
       PUBLIC_WEB_URL: http://localhost:4000

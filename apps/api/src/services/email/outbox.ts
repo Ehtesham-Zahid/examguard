@@ -170,7 +170,7 @@ function getTransport() {
   }
   return transporter;
 }
-export const fromAddress = () => config.email.from || (config.email.user ? `ExamGuard <${config.email.user}>` : 'ExamGuard');
+export const fromAddress = () => config.email.from || (config.email.user ? `Examify <${config.email.user}>` : 'Examify');
 const NOT_CONFIGURED = 'Email delivery is not configured (set EMAIL_RELAY_URL + EMAIL_RELAY_SECRET, or SMTP_USER + SMTP_PASS)';
 
 /* ---- Google Apps Script relay: HTTPS POST to a web app that calls MailApp.sendEmail (see scripts/google-apps-script) */
@@ -234,7 +234,7 @@ export async function verifyTransport(): Promise<{ ok: boolean; error?: string; 
 
 async function send(msg: RelayMessage & { kind: string; id: string }) {
   if (emailMode() === 'relay' && !testTransport) {
-    const r = await callRelay({ action: 'send', ...msg, name: (config.email.from.match(/^(.*?)\s*</)?.[1] || 'ExamGuard').replace(/"/g, '') });
+    const r = await callRelay({ action: 'send', ...msg, name: (config.email.from.match(/^(.*?)\s*</)?.[1] || 'Examify').replace(/"/g, '') });
     return r.id ?? null;
   }
   const info = await getTransport().sendMail({
@@ -245,7 +245,7 @@ async function send(msg: RelayMessage & { kind: string; id: string }) {
     html: msg.html,
     text: msg.text,
     attachments: msg.attachments?.map((a) => ({ filename: a.filename, content: Buffer.from(a.base64, 'base64'), contentType: a.contentType })),
-    headers: { 'X-ExamGuard-Email': msg.kind, 'X-Entity-Ref-ID': msg.id },
+    headers: { 'X-Examify-Email': msg.kind, 'X-Entity-Ref-ID': msg.id },
   });
   return info.messageId ?? null;
 }

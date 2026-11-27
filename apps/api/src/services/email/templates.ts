@@ -1,5 +1,5 @@
 /**
- * Transactional email templates in the ExamGuard "Graph Notebook" style.
+ * Transactional email templates in the Examify "Graph Notebook" style.
  *
  * Pure functions: (kind, data) -> { subject, html, text }. Email clients ignore <style> blocks and web fonts
  * unevenly, so everything is table-based with inline styles and system font stacks, and every email has a
@@ -173,7 +173,7 @@ function layout(d: Doc): Rendered {
   const accent = d.accent === 'ok' ? C.ok : d.accent === 'danger' ? C.danger : C.margin;
   const titleHtml = d.highlight && d.title.includes(d.highlight) ? esc(d.title).replace(esc(d.highlight), `<span style="background:${C.hl};color:${C.ink};padding:0 6px;border-radius:4px;-webkit-box-decoration-break:clone;box-decoration-break:clone;">${esc(d.highlight)}</span>`) : esc(d.title);
   const prefs = url('/settings');
-  const footer = d.footer ?? `You're getting this because you have an ExamGuard account. <a href="${esc(prefs)}" style="color:${C.ink};">Email preferences</a>`;
+  const footer = d.footer ?? `You're getting this because you have an Examify account. <a href="${esc(prefs)}" style="color:${C.ink};">Email preferences</a>`;
   const html = `<!doctype html>
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml">
 <head>
@@ -198,7 +198,7 @@ function layout(d: Doc): Rendered {
         <td style="vertical-align:middle;">
           <table role="presentation" cellpadding="0" cellspacing="0"><tr>
             <td style="width:34px;height:34px;background:${C.ink};border-radius:9px;text-align:center;vertical-align:middle;font-family:${SANS};font-size:18px;font-weight:800;color:${C.hl};">E</td>
-            <td style="padding-left:10px;font-family:${SANS};font-size:20px;font-weight:800;letter-spacing:-0.3px;color:${C.ink};">ExamGuard</td>
+            <td style="padding-left:10px;font-family:${SANS};font-size:20px;font-weight:800;letter-spacing:-0.3px;color:${C.ink};">Examify</td>
           </tr></table>
         </td>
         <td align="right" style="vertical-align:middle;font-family:${MONO};font-size:11px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:${C.muted};">${esc(d.eyebrow)}</td>
@@ -218,14 +218,14 @@ function layout(d: Doc): Rendered {
     <!-- footer -->
     <tr><td style="padding:22px 8px 0;font-family:${BODY};font-size:12px;line-height:1.6;color:${C.muted};text-align:center;">
       ${footer}<br>
-      <span style="font-family:${MONO};font-size:11px;letter-spacing:0.6px;">ExamGuard &middot; secure examination management &middot; <a href="${esc(config.publicUrl)}" style="color:${C.muted};">${esc(config.publicUrl.replace(/^https?:\/\//, ''))}</a></span>
+      <span style="font-family:${MONO};font-size:11px;letter-spacing:0.6px;">Examify &middot; secure examination management &middot; <a href="${esc(config.publicUrl)}" style="color:${C.muted};">${esc(config.publicUrl.replace(/^https?:\/\//, ''))}</a></span>
     </td></tr>
   </table>
 </td></tr>
 </table>
 </body>
 </html>`;
-  const text = [`EXAMGUARD — ${d.eyebrow.toUpperCase()}`, '', d.title, '', ...d.blocks.map((b) => b.text).filter(Boolean).flatMap((t) => [t, '']), '—', footer.replace(/<[^>]+>/g, ''), `Email preferences: ${prefs}`].join('\n');
+  const text = [`EXAMIFY — ${d.eyebrow.toUpperCase()}`, '', d.title, '', ...d.blocks.map((b) => b.text).filter(Boolean).flatMap((t) => [t, '']), '—', footer.replace(/<[^>]+>/g, ''), `Email preferences: ${prefs}`].join('\n');
   return { subject: d.subject, preheader: d.preheader, html, text };
 }
 
@@ -390,14 +390,14 @@ export function renderEmail(kind: EmailKind, data: EmailData): Rendered {
     case 'welcome': {
       const link = tokenLink('/reset-password', data.token);
       return layout({
-        subject: `Welcome to ExamGuard — set your password`,
+        subject: `Welcome to Examify — set your password`,
         preheader: `Your ${String(data.role ?? 'candidate').toLowerCase()} account is ready.`,
         eyebrow: 'Welcome',
         title: `Your account is ready`,
         highlight: 'ready',
         blocks: [
           hi,
-          p(`${data.invitedBy ? `${esc(data.invitedBy)} created` : 'An administrator created'} an ExamGuard ${esc(String(data.role ?? 'candidate').toLowerCase())} account for you. Choose a password to finish setting it up.`),
+          p(`${data.invitedBy ? `${esc(data.invitedBy)} created` : 'An administrator created'} an Examify ${esc(String(data.role ?? 'candidate').toLowerCase())} account for you. Choose a password to finish setting it up.`),
           details([
             ['Sign-in email', esc(data.email)],
             ['Link expires', esc(data.expiresAt ? fmtWhen(data.expiresAt) : 'in 7 days')],
@@ -413,7 +413,7 @@ export function renderEmail(kind: EmailKind, data: EmailData): Rendered {
       const link = tokenLink('/reset-password', data.token);
       const admin = kind === 'password_reset';
       return layout({
-        subject: admin ? 'Your ExamGuard password was reset' : 'Reset your ExamGuard password',
+        subject: admin ? 'Your Examify password was reset' : 'Reset your Examify password',
         preheader: admin ? 'Choose a new password to sign in again.' : 'Use this link to choose a new password.',
         eyebrow: 'Password',
         title: admin ? 'Your password was reset' : 'Reset your password',
@@ -429,7 +429,7 @@ export function renderEmail(kind: EmailKind, data: EmailData): Rendered {
     }
     case 'password_changed':
       return layout({
-        subject: 'Your ExamGuard password was changed',
+        subject: 'Your Examify password was changed',
         preheader: 'If this was you, no action is needed.',
         eyebrow: 'Security',
         title: 'Your password was changed',
@@ -444,7 +444,7 @@ export function renderEmail(kind: EmailKind, data: EmailData): Rendered {
       });
     case 'test':
       return layout({
-        subject: 'ExamGuard test email ✓',
+        subject: 'Examify test email ✓',
         preheader: 'Email delivery is working.',
         eyebrow: 'Test',
         title: 'Email delivery works',
@@ -452,7 +452,7 @@ export function renderEmail(kind: EmailKind, data: EmailData): Rendered {
         accent: 'ok',
         blocks: [
           hi,
-          p(`This is a test message sent by ${esc(data.sentBy ?? 'an administrator')} from the ExamGuard email log. If you can read it, exam notifications, reminders and result emails will reach your candidates.`),
+          p(`This is a test message sent by ${esc(data.sentBy ?? 'an administrator')} from the Examify email log. If you can read it, exam notifications, reminders and result emails will reach your candidates.`),
           details([
             ['Sent at', esc(fmtWhen(data.at ?? new Date().toISOString()))],
             ['Server', esc(config.publicUrl)],
@@ -484,11 +484,11 @@ export function examIcs(e: ExamInfo) {
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//ExamGuard//Exams//EN',
+    'PRODID:-//Examify//Exams//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     'BEGIN:VEVENT',
-    `UID:exam-${e.examId}@examguard`,
+    `UID:exam-${e.examId}@examify`,
     `DTSTAMP:${icsDate(new Date().toISOString())}`,
     `DTSTART:${icsDate(e.windowStart)}`,
     `DTEND:${icsDate(e.windowEnd)}`,

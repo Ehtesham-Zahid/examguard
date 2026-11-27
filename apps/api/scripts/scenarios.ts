@@ -4,7 +4,7 @@
  *   DATABASE_URL=... API=http://localhost:4300/api npx tsx scripts/scenarios.ts
  * The API must point its email at the in-process SMTP sink this script starts (real delivery end to end),
  * and the AI marking assistant at the in-process mock Claude API (real Anthropic SDK path):
- *   SMTP_HOST=localhost SMTP_PORT=2526 SMTP_USER=sink@examguard.test SMTP_PASS=sink EMAIL_ALLOW_TEST_DOMAINS=true
+ *   SMTP_HOST=localhost SMTP_PORT=2526 SMTP_USER=sink@examify.test SMTP_PASS=sink EMAIL_ALLOW_TEST_DOMAINS=true
  *   ANTHROPIC_API_KEY=mock ANTHROPIC_BASE_URL=http://localhost:4601
  */
 import { PrismaClient } from '@prisma/client';
@@ -45,7 +45,7 @@ function decodeMail(raw: string) {
   const b64 = [...raw.matchAll(/Content-Transfer-Encoding: base64\r?\n(?:[^\r\n]+\r?\n)*?\r?\n([A-Za-z0-9+/=\r\n]+)/g)].map((m) => Buffer.from(m[1].replace(/\s+/g, ''), 'base64').toString('utf8'));
   return [qp, ...b64].join('\n');
 }
-const mailFor = (to: string, kind: string) => inbox.filter((m) => m.to.includes(to) && new RegExp(`^X-ExamGuard-Email: ${kind}\\r?$`, 'im').test(m.raw));
+const mailFor = (to: string, kind: string) => inbox.filter((m) => m.to.includes(to) && new RegExp(`^X-Examify-Email: ${kind}\\r?$`, 'im').test(m.raw));
 async function waitFor<T>(fn: () => Promise<T> | T, ms = 12_000): Promise<T> {
   const end = Date.now() + ms;
   for (;;) {
@@ -93,13 +93,13 @@ async function newLiveExam(examiner: string, title: string, settings: Record<str
 async function main() {
   await startSink();
   const claude = await startMockClaude(Number(process.env.MOCK_CLAUDE_PORT ?? 4601));
-  const examiner = await login('examiner@examguard.test', 'Examiner@123');
-  const admin = await login('admin@examguard.test', 'Admin@123');
+  const examiner = await login('examiner@examify.test', 'Examiner@123');
+  const admin = await login('admin@examify.test', 'Admin@123');
 
   // ---------- 1. time expiry → sweeper auto-submits
   {
     const id = await newLiveExam(examiner, 'S1 expiry');
-    const s = await login('student3@examguard.test');
+    const s = await login('student3@examify.test');
     const st = await call('POST', `/candidate/exams/${id}/start`, s, {}, dev('s1'));
     const a = st.json.attemptId;
     const q = (await call('GET', `/candidate/attempts/${a}`, s, undefined, dev('s1'))).json.questions[0];
@@ -117,7 +117,7 @@ async function main() {
   // ---------- 2. violation limit → force submit
   {
     const id = await newLiveExam(examiner, 'S2 violations', { maxViolations: 3 });
-    const s = await login('student4@examguard.test');
+    const s = await login('student4@examify.test');
     const a = (await call('POST', `/candidate/exams/${id}/start`, s, {}, dev('s2'))).json.attemptId;
     await call('POST', `/candidate/attempts/${a}/events`, s, { events: [{ type: 'TAB_HIDDEN' }, { type: 'CONTEXT_MENU' }] }, dev('s2'));
     const r = await call('POST', `/candidate/attempts/${a}/events`, s, { events: [{ type: 'PASTE_ATTEMPT' }, { type: 'FULLSCREEN_EXIT' }] }, dev('s2'));
@@ -132,7 +132,7 @@ async function main() {
   let switchExam = '';
   {
     switchExam = await newLiveExam(examiner, 'S3 device switch');
-    const s = await login('student5@examguard.test');
+    const s = await login('student5@examify.test');
     const a = (await call('POST', `/candidate/exams/${switchExam}/start`, s, {}, dev('A'))).json.attemptId;
     const b1 = await call('POST', `/candidate/exams/${switchExam}/start`, s, {}, dev('B'));
     ok(b1.status === 409 && b1.json.error.code === 'SESSION_LOCKED', 'second device locked');
@@ -151,7 +151,7 @@ async function main() {
 
   // ---------- 4. silent device → automatic switch
   {
-    const s = await login('student6@examguard.test');
+    const s = await login('student6@examify.test');
     const a = (await call('POST', `/candidate/exams/${switchExam}/start`, s, {}, dev('C'))).json.attemptId;
     await prisma.attempt.update({ where: { id: a }, data: { lastHeartbeatAt: new Date(Date.now() - 120_000) } });
     const r = await call('POST', `/candidate/exams/${switchExam}/start`, s, {}, dev('D'));
@@ -161,7 +161,7 @@ async function main() {
   // ---------- 5. power cut during exam → auto-submitted → compensation reopens with remaining time
   {
     const id = await newLiveExam(examiner, 'S5 power cut');
-    const s = await login('student7@examguard.test');
+    const s = await login('student7@examify.test');
     const a = (await call('POST', `/candidate/exams/${id}/start`, s, {}, dev('P'))).json.attemptId;
     // candidate last seen 10 min before their deadline; deadline has now passed
     const deadline = new Date(Date.now() - 15_000);
@@ -184,7 +184,7 @@ async function main() {
   // ---------- 6. heartbeat gap with no offline work → compensation; approve extends deadline
   {
     const id = await newLiveExam(examiner, 'S6 gap');
-    const s = await login('student8@examguard.test');
+    const s = await login('student8@examify.test');
     const a = (await call('POST', `/candidate/exams/${id}/start`, s, {}, dev('G'))).json.attemptId;
     const before = (await prisma.attempt.findUniqueOrThrow({ where: { id: a } })).deadline.getTime();
     await prisma.attempt.update({ where: { id: a }, data: { lastHeartbeatAt: new Date(Date.now() - 180_000) } });
@@ -199,7 +199,7 @@ async function main() {
   // ---------- 7. offline answers merged after the deadline only with valid evidence
   {
     const id = await newLiveExam(examiner, 'S7 offline merge');
-    const s = await login('student9@examguard.test');
+    const s = await login('student9@examify.test');
     const a = (await call('POST', `/candidate/exams/${id}/start`, s, {}, dev('O'))).json.attemptId;
     const qs = (await call('GET', `/candidate/attempts/${a}`, s, undefined, dev('O'))).json.questions;
     const deadline = Date.now() - 60_000;
@@ -227,14 +227,14 @@ async function main() {
   // ---------- 8. pause / resume
   {
     const id = await newLiveExam(examiner, 'S8 pause');
-    const s = await login('student10@examguard.test');
+    const s = await login('student10@examify.test');
     const a = (await call('POST', `/candidate/exams/${id}/start`, s, {}, dev('Z'))).json.attemptId;
     const q = (await call('GET', `/candidate/attempts/${a}`, s, undefined, dev('Z'))).json.questions[0];
     const d0 = (await prisma.attempt.findUniqueOrThrow({ where: { id: a } })).deadline.getTime();
     await call('POST', `/exams/${id}/pause`, examiner, { reason: 'fire drill' });
     const blocked = await call('PUT', `/candidate/attempts/${a}/answers`, s, { items: [{ questionId: q.id, response: [q.options[0].id], seq: 1 }] }, dev('Z'));
     ok(blocked.status === 409 && blocked.json.error.code === 'EXAM_PAUSED', 'answers rejected while paused');
-    const s2 = await login('student11@examguard.test');
+    const s2 = await login('student11@examify.test');
     ok((await call('POST', `/candidate/exams/${id}/start`, s2, {}, dev('Y'))).status === 409, 'no new starts while paused');
     await sleep(3000);
     const res = await call('POST', `/exams/${id}/resume`, examiner);
@@ -252,7 +252,7 @@ async function main() {
   // ---------- 9. access code + late join
   {
     const id = await newLiveExam(examiner, 'S9 code', { lateJoinMin: 0 }, { accessCode: 'OPEN42' });
-    const s = await login('student12@examguard.test');
+    const s = await login('student12@examify.test');
     ok((await call('POST', `/candidate/exams/${id}/start`, s, { accessCode: 'nope' }, dev('K'))).status === 403, 'wrong access code rejected');
     ok((await call('POST', `/candidate/exams/${id}/start`, s, { accessCode: 'OPEN42' }, dev('K'))).status === 201, 'correct access code accepted');
     const id2 = await newLiveExam(examiner, 'S9 late', { lateJoinMin: 1 });
@@ -263,7 +263,7 @@ async function main() {
   // ---------- 9b. "no going back" is enforced by the server, not just the UI
   {
     const id = await newLiveExam(examiner, 'S9b no back nav', { allowBackNav: false, shuffleQuestions: false });
-    const s = await login('student8@examguard.test');
+    const s = await login('student8@examify.test');
     const a = (await call('POST', `/candidate/exams/${id}/start`, s, {}, dev('NB'))).json.attemptId;
     const qs = (await call('GET', `/candidate/attempts/${a}`, s, undefined, dev('NB'))).json.questions;
     await call('PUT', `/candidate/attempts/${a}/answers`, s, { items: [{ questionId: qs[0].id, response: [qs[0].options[0].id], visited: true, seq: 1 }] }, dev('NB'));
@@ -279,7 +279,7 @@ async function main() {
     const exams = (await call('GET', '/exams', examiner)).json as any[];
     const fair = exams.find((e) => e.mode === 'BLUEPRINT');
     const papers: string[][] = [];
-    for (const email of ['student1@examguard.test', 'student2@examguard.test', 'student3@examguard.test']) {
+    for (const email of ['student1@examify.test', 'student2@examify.test', 'student3@examify.test']) {
       const s = await login(email);
       const a = (await call('POST', `/candidate/exams/${fair.id}/start`, s, {}, dev(email))).json.attemptId;
       const st = (await call('GET', `/candidate/attempts/${a}`, s, undefined, dev(email))).json;
@@ -292,7 +292,7 @@ async function main() {
   // ---------- 11. question versioning protects live attempts
   {
     const id = await newLiveExam(examiner, 'S11 versions', { shuffleQuestions: false });
-    const s = await login('student2@examguard.test');
+    const s = await login('student2@examify.test');
     const a = (await call('POST', `/candidate/exams/${id}/start`, s, {}, dev('V'))).json.attemptId;
     const before = (await call('GET', `/candidate/attempts/${a}`, s, undefined, dev('V'))).json.questions[0];
     const ex = (await call('GET', `/exams/${id}`, examiner)).json;
@@ -303,7 +303,7 @@ async function main() {
     ok(upd.status === 200 && upd.json.currentVersion === full.currentVersion + 1, 'edit creates a new version');
     const after = (await call('GET', `/candidate/attempts/${a}`, s, undefined, dev('V'))).json.questions.find((q: any) => q.id === before.id);
     ok(after.body === before.body, 'active attempt still shows the original version');
-    const s2 = await login('student6@examguard.test');
+    const s2 = await login('student6@examify.test');
     const a2 = (await call('POST', `/candidate/exams/${id}/start`, s2, {}, dev('V2'))).json.attemptId;
     const fresh = (await call('GET', `/candidate/attempts/${a2}`, s2, undefined, dev('V2'))).json.questions[0];
     ok(fresh.body === before.body, 'candidates starting after the edit still get the version pinned at publish');
@@ -367,25 +367,25 @@ async function main() {
 
   // ---------- 13. account security
   {
-    const create = await call('POST', '/users', admin, { name: 'Temp User', email: 'temp.user@examguard.test', role: 'CANDIDATE' });
+    const create = await call('POST', '/users', admin, { name: 'Temp User', email: 'temp.user@examify.test', role: 'CANDIDATE' });
     const pw = create.json.temporaryPassword;
-    const t = await login('temp.user@examguard.test', pw);
+    const t = await login('temp.user@examify.test', pw);
     ok(!!t, 'new user signs in with temporary password');
     const me = await call('GET', '/auth/me', t);
     ok(me.json.user.mustChangePassword === true, 'must change password on first login');
     ok((await call('GET', '/candidate/exams', t)).status === 403, 'API refuses other requests until the temporary password is changed');
     await call('PATCH', `/users/${create.json.user.id}`, admin, { status: 'DISABLED' });
     ok((await call('GET', '/auth/me', t)).status === 401, 'disabling a user kills their existing session');
-    ok((await call('POST', '/auth/login', undefined, { email: 'temp.user@examguard.test', password: pw })).status === 401, 'disabled user cannot sign in');
+    ok((await call('POST', '/auth/login', undefined, { email: 'temp.user@examify.test', password: pw })).status === 401, 'disabled user cannot sign in');
     const adminMe = (await call('GET', '/auth/me', admin)).json.user;
     ok((await call('PATCH', `/users/${adminMe.id}`, admin, { role: 'CANDIDATE' })).status === 400, 'admin cannot demote themselves');
-    for (let i = 0; i < 5; i++) await call('POST', '/auth/login', undefined, { email: 'student11@examguard.test', password: 'wrong' });
-    const locked = await call('POST', '/auth/login', undefined, { email: 'student11@examguard.test', password: 'Student@123' });
+    for (let i = 0; i < 5; i++) await call('POST', '/auth/login', undefined, { email: 'student11@examify.test', password: 'wrong' });
+    const locked = await call('POST', '/auth/login', undefined, { email: 'student11@examify.test', password: 'Student@123' });
     ok(locked.status === 401 && /locked/i.test(locked.json.error.message), 'account locks after 5 failed attempts');
-    const lr = await fetch(BASE + '/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'student1@examguard.test', password: 'Student@123' }) });
+    const lr = await fetch(BASE + '/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'student1@examify.test', password: 'Student@123' }) });
     const rt = /eg_refresh=([^;]+)/.exec(lr.headers.get('set-cookie') ?? '')?.[1];
     ok(rt && (await call('GET', '/auth/me', rt)).status === 401, 'refresh token cannot be used as an access token');
-    const s = await login('student1@examguard.test');
+    const s = await login('student1@examify.test');
     await call('POST', '/auth/logout-all', s);
     ok((await call('GET', '/auth/me', s)).status === 401, 'logout from all devices invalidates tokens');
     ok((await call('POST', '/candidate/exams/x/start', examiner, {}, dev('e'))).status === 403, 'examiners cannot take real exams');
@@ -396,7 +396,7 @@ async function main() {
   {
     // (a) malformed socket messages must not crash the API
     const { io } = await import('../../web/node_modules/socket.io-client/build/esm/index.js' as string);
-    const sock = io(BASE.replace(/\/api$/, ''), { auth: { token: await login('student2@examguard.test') }, transports: ['websocket'] });
+    const sock = io(BASE.replace(/\/api$/, ''), { auth: { token: await login('student2@examify.test') }, transports: ['websocket'] });
     await new Promise((r) => sock.on('connect', r));
     sock.emit('join:exam');
     sock.emit('join:exam', { bad: true });
@@ -414,14 +414,14 @@ async function main() {
     const target = (await call('GET', `/questions/${pool[0].questionId}`, examiner)).json;
     const cur = target.current;
     await call('PUT', `/questions/${target.id}`, examiner, { topicId: target.topicId, type: target.type, difficulty: target.difficulty, body: cur.body + ' [v-next]', options: cur.options, correct: cur.correct, marks: cur.marks, negativeMarks: cur.negativeMarks, multiScheme: cur.multiScheme, tags: target.tags });
-    const s9 = await login('student9@examguard.test');
+    const s9 = await login('student9@examify.test');
     const a9 = (await call('POST', `/candidate/exams/${fair.id}/start`, s9, {}, dev('BP'))).json.attemptId;
     const paper = (await call('GET', `/candidate/attempts/${a9}`, s9, undefined, dev('BP'))).json.questions as any[];
     ok(paper.length === 10 && !paper.some((q) => q.body.includes('[v-next]')), 'new blueprint papers use the versions frozen at publish');
 
     // (c) heartbeat after an outage with answers still queued on the device → no compensation
     const id = await newLiveExam(examiner, 'R2 comp');
-    const s4 = await login('student4@examguard.test');
+    const s4 = await login('student4@examify.test');
     const a4 = (await call('POST', `/candidate/exams/${id}/start`, s4, {}, dev('RC'))).json.attemptId;
     await prisma.attempt.update({ where: { id: a4 }, data: { lastHeartbeatAt: new Date(Date.now() - 180_000) } });
     await call('POST', `/candidate/attempts/${a4}/heartbeat`, s4, { pending: 3 }, dev('RC'));
@@ -442,19 +442,19 @@ async function main() {
     // (f) a pause moves the late-join cutoff
     const id2 = await newLiveExam(examiner, 'R2 latejoin', { lateJoinMin: 1 });
     await prisma.exam.update({ where: { id: id2 }, data: { windowStart: new Date(Date.now() - 90_000), pausedSec: 120 } });
-    ok((await call('POST', `/candidate/exams/${id2}/start`, await login('student10@examguard.test'), {}, dev('LJ'))).status === 201, 'paused time extends the late-entry cutoff');
+    ok((await call('POST', `/candidate/exams/${id2}/start`, await login('student10@examify.test'), {}, dev('LJ'))).status === 201, 'paused time extends the late-entry cutoff');
   }
 
 
   // ---------- 15. email system (outbox → worker → real SMTP delivery into the sink)
   {
-    const studentId = (await prisma.user.findUniqueOrThrow({ where: { email: 'student5@examguard.test' } })).id;
+    const studentId = (await prisma.user.findUniqueOrThrow({ where: { email: 'student5@examify.test' } })).id;
     // (a) publishing a live exam emails "open now" to every enrolled candidate, delivered over SMTP
     const live = await newLiveExam(examiner, 'E1 email live');
     // the worker paces itself (Gmail-safe rate), so allow time for anything queued earlier in the run
     const delivered = await waitFor(async () => (await prisma.emailOutbox.count({ where: { kind: 'exam_open', dedupeKey: { startsWith: `open:${live}:` }, status: 'SENT' } })) >= 3, 90_000);
     ok(delivered, 'live publish → "exam open" emails delivered over SMTP');
-    ok(mailFor('student5@examguard.test', 'exam_open').length >= 1, 'sink received the exam-open email for the candidate');
+    ok(mailFor('student5@examify.test', 'exam_open').length >= 1, 'sink received the exam-open email for the candidate');
 
     // (b) a future exam sends "scheduled" with a calendar invite
     const now = Date.now();
@@ -463,7 +463,7 @@ async function main() {
     await call('PUT', `/exams/${fut.json.id}/questions`, examiner, { questionIds: qs.map((q) => q.id) });
     await call('POST', `/exams/${fut.json.id}/enrollments`, examiner, { candidateIds: [studentId] });
     ok((await call('POST', `/exams/${fut.json.id}/publish`, examiner)).status === 200, 'future exam published');
-    const sched = await waitFor(() => mailFor('student5@examguard.test', 'exam_scheduled').find((m) => decodeMail(m.raw).includes('E2 email future')));
+    const sched = await waitFor(() => mailFor('student5@examify.test', 'exam_scheduled').find((m) => decodeMail(m.raw).includes('E2 email future')));
     ok(!!sched && /text\/calendar/.test(sched.raw) && decodeMail(sched.raw).includes('BEGIN:VCALENDAR'), 'scheduled email carries an .ics calendar invite');
     ok(!!sched && decodeMail(sched.raw).includes('Pakistan Standard Time'), 'times in the email name the time zone');
 
@@ -482,7 +482,7 @@ async function main() {
     ok((await prisma.emailOutbox.count({ where: { kind: 'exam_open', dedupeKey: { startsWith: `open:${live}:` } } })) === (await prisma.enrollment.count({ where: { examId: live } })), '"open" emails from publish and scheduler are not duplicated');
 
     // (e) opt-out: candidate turns exam emails off → recorded as skipped, never delivered
-    const s5 = await login('student5@examguard.test');
+    const s5 = await login('student5@examify.test');
     ok((await call('PUT', '/auth/prefs', s5, { emailExams: false })).status === 200, 'candidate can turn exam emails off');
     const optExam = await newLiveExam(examiner, 'E3 email optout');
     const row = await waitFor(() => prisma.emailOutbox.findFirst({ where: { userId: studentId, dedupeKey: { startsWith: `open:${optExam}:${studentId}:` } } }));
@@ -490,28 +490,28 @@ async function main() {
     await call('PUT', '/auth/prefs', s5, { emailExams: true });
 
     // (f) forgot password: same answer for unknown accounts, single-use link, old password stops working
-    const unknown = await call('POST', '/auth/password/forgot', undefined, { email: 'nobody-here@examguard.test' });
-    const known = await call('POST', '/auth/password/forgot', undefined, { email: 'student6@examguard.test' });
+    const unknown = await call('POST', '/auth/password/forgot', undefined, { email: 'nobody-here@examify.test' });
+    const known = await call('POST', '/auth/password/forgot', undefined, { email: 'student6@examify.test' });
     ok(unknown.status === 200 && known.status === 200 && JSON.stringify(unknown.json) === JSON.stringify(known.json), 'forgot-password does not reveal which emails exist');
-    const fmail = await waitFor(() => mailFor('student6@examguard.test', 'password_forgot')[0]);
+    const fmail = await waitFor(() => mailFor('student6@examify.test', 'password_forgot')[0]);
     const token = fmail && decodeMail(fmail.raw).match(/reset-password\?token=([A-Za-z0-9_-]{30,})/)?.[1];
     ok(!!token, 'reset email delivered with a link');
     const info = await call('GET', `/auth/password/token?token=${token}`);
     ok(info.json.valid === true && info.json.purpose === 'forgot' && !String(info.json.email).includes('student6'), 'link validates and masks the address');
-    await waitFor(async () => (await prisma.emailOutbox.findFirst({ where: { to: 'student6@examguard.test', kind: 'password_forgot' } }))?.status === 'SENT');
-    const stored = await prisma.emailOutbox.findFirst({ where: { to: 'student6@examguard.test', kind: 'password_forgot' } });
+    await waitFor(async () => (await prisma.emailOutbox.findFirst({ where: { to: 'student6@examify.test', kind: 'password_forgot' } }))?.status === 'SENT');
+    const stored = await prisma.emailOutbox.findFirst({ where: { to: 'student6@examify.test', kind: 'password_forgot' } });
     ok((stored?.data as any)?.token === null, 'token is removed from the email log after delivery');
     ok((await call('POST', '/auth/password/reset', undefined, { token, password: 'short' })).status === 400, 'weak password rejected');
     ok((await call('POST', '/auth/password/reset', undefined, { token, password: 'NewPass@2026' })).status === 200, 'password reset with the link');
     ok((await call('POST', '/auth/password/reset', undefined, { token, password: 'Another@2026' })).status === 400, 'link cannot be reused');
-    ok((await call('POST', '/auth/login', undefined, { email: 'student6@examguard.test', password: 'Student@123' })).status === 401, 'old password no longer works');
-    ok((await call('POST', '/auth/login', undefined, { email: 'student6@examguard.test', password: 'NewPass@2026' })).status === 200, 'new password works');
-    ok(!!(await waitFor(() => mailFor('student6@examguard.test', 'password_changed')[0])), 'password-changed security alert delivered');
+    ok((await call('POST', '/auth/login', undefined, { email: 'student6@examify.test', password: 'Student@123' })).status === 401, 'old password no longer works');
+    ok((await call('POST', '/auth/login', undefined, { email: 'student6@examify.test', password: 'NewPass@2026' })).status === 200, 'new password works');
+    ok(!!(await waitFor(() => mailFor('student6@examify.test', 'password_changed')[0])), 'password-changed security alert delivered');
 
     // (g) admin creates a user → welcome email with a set-password link
-    const created = await call('POST', '/users', admin, { name: 'Mail Welcome', email: 'welcome.user@examguard.test', role: 'CANDIDATE' });
+    const created = await call('POST', '/users', admin, { name: 'Mail Welcome', email: 'welcome.user@examify.test', role: 'CANDIDATE' });
     ok(created.status === 201 && created.json.emailed === true, 'account created and welcome email queued');
-    const wmail = await waitFor(() => mailFor('welcome.user@examguard.test', 'welcome')[0]);
+    const wmail = await waitFor(() => mailFor('welcome.user@examify.test', 'welcome')[0]);
     const wtoken = wmail && decodeMail(wmail.raw).match(/reset-password\?token=([A-Za-z0-9_-]{30,})/)?.[1];
     ok((await call('GET', `/auth/password/token?token=${wtoken}`)).json.purpose === 'welcome', 'welcome link is a "set your password" link');
     ok((await call('POST', '/auth/password/reset', undefined, { token: wtoken, password: 'Welcome@2026' })).status === 200, 'new user sets their own password from the email');
@@ -523,12 +523,12 @@ async function main() {
     const prev = await call('GET', `/admin/emails/${stored!.id}`, admin);
     ok(prev.status === 200 && prev.json.html.includes('<!doctype html>') && prev.json.linkRedacted === true, 'preview renders the email (link redacted)');
     ok((await call('POST', `/admin/emails/${stored!.id}/retry`, admin)).status === 409, 'a delivered one-time link cannot be resent');
-    const test = await call('POST', '/admin/emails/test', admin, { to: 'ops@examguard.test' });
-    ok(test.status === 201 && !!(await waitFor(() => mailFor('ops@examguard.test', 'test')[0])), 'test email delivered end to end');
+    const test = await call('POST', '/admin/emails/test', admin, { to: 'ops@examify.test' });
+    ok(test.status === 201 && !!(await waitFor(() => mailFor('ops@examify.test', 'test')[0])), 'test email delivered end to end');
 
     // (i) SMTP outage: the email is retried with backoff and delivered once the server is back
     sinkDown = true;
-    const t2 = await call('POST', '/admin/emails/test', admin, { to: 'retry@examguard.test' });
+    const t2 = await call('POST', '/admin/emails/test', admin, { to: 'retry@examify.test' });
     const failed = await waitFor(async () => {
       const r = await prisma.emailOutbox.findUnique({ where: { id: t2.json.id } });
       return r && r.status === 'PENDING' && r.attempts >= 1 && r.lastError ? r : null;
@@ -536,8 +536,8 @@ async function main() {
     ok(!!failed, 'SMTP temporarily down (421) → email stays queued for retry with the error recorded');
     sinkDown = false;
     await prisma.emailOutbox.update({ where: { id: t2.json.id }, data: { sendAfter: new Date() } });
-    await call('POST', '/admin/emails/test', admin, { to: 'kick@examguard.test' }); // nudges the worker
-    ok(!!(await waitFor(() => mailFor('retry@examguard.test', 'test')[0], 20_000)), 'retried and delivered after SMTP recovers');
+    await call('POST', '/admin/emails/test', admin, { to: 'kick@examify.test' }); // nudges the worker
+    ok(!!(await waitFor(() => mailFor('retry@examify.test', 'test')[0], 20_000)), 'retried and delivered after SMTP recovers');
 
     // (j) results published earlier in this run produced result emails with the certificate code
     const res = await prisma.emailOutbox.findFirst({ where: { kind: 'results_published' } });
@@ -608,7 +608,7 @@ async function main() {
     if (blank) ok((await call('POST', `/staff/answers/${blank.id}/ai-suggest`, examiner, {})).status === 400, 'blank answers are not sent to Claude');
     const mcq = await prisma.answer.findFirst({ where: { attempt: { examId: gradingExam! }, attemptQuestion: { questionVersion: { question: { type: { not: 'WRITTEN' } } } } } });
     if (mcq) ok((await call('POST', `/staff/answers/${mcq.id}/ai-suggest`, examiner, {})).status === 400, 'multiple-choice answers cannot be AI-marked');
-    ok((await call('POST', `/staff/answers/${i1.answerId}/ai-suggest`, await login('student@examguard.test'), {})).status === 403, 'candidates cannot use the AI assistant');
+    ok((await call('POST', `/staff/answers/${i1.answerId}/ai-suggest`, await login('student@examify.test'), {})).status === 403, 'candidates cannot use the AI assistant');
 
     // (f) the examiner decides; the decision is logged next to the AI mark
     const latest1 = (await call('POST', `/staff/answers/${i1.answerId}/ai-suggest`, examiner, {})).json.suggestion;
@@ -617,7 +617,11 @@ async function main() {
     const other = latest1.score >= group.marks ? 0 : group.marks;
     const g1b = await call('PUT', `/staff/answers/${i1.answerId}/grade`, examiner, { score: other });
     ok(g1b.json.aiDecision === 'ADJUSTED', 'saving a different mark records ADJUSTED');
-    const logRow = await prisma.auditLog.findFirst({ where: { action: 'answer.grade' }, orderBy: { seq: 'desc' } });
+    // audit entries are appended just after the response (hash-chained in order), so wait for this one
+    const logRow = await waitFor(async () => {
+      const r = await prisma.auditLog.findFirst({ where: { action: 'answer.grade' }, orderBy: { seq: 'desc' } });
+      return (r?.data as any)?.after === other ? r : null;
+    });
     ok((logRow?.data as any)?.aiScore === latest1.score && (logRow?.data as any)?.after === other, 'audit log stores the AI mark next to the final mark');
 
     // (g) batch: dry run count, start, finishes, skips answers that already have a suggestion
@@ -631,7 +635,7 @@ async function main() {
     ok(!!finished && finished.done === finished.total, 'batch job completes and reports progress');
     const dry2 = (await call('POST', `/staff/exams/${gradingExam}/ai/batch`, examiner, { questionId: group.questionId, dryRun: true })).json;
     ok(dry2.count === 0, 'answers with a current suggestion are skipped on the next batch');
-    ok((await call('POST', `/staff/exams/${gradingExam}/ai/batch`, await login('examiner2@examguard.test', 'Examiner@123'), { dryRun: true })).status === 403, "another examiner cannot run AI on someone else's exam");
+    ok((await call('POST', `/staff/exams/${gradingExam}/ai/batch`, await login('examiner2@examify.test', 'Examiner@123'), { dryRun: true })).status === 403, "another examiner cannot run AI on someone else's exam");
 
     // (h) consistency: look-alike answers with very different marks, and big gaps from the AI mark
     const twin = 'The strategy pattern puts each algorithm behind a shared interface so the caller can swap implementations at runtime without changing its own code, for example payment methods in a checkout.';
@@ -648,9 +652,9 @@ async function main() {
   // ---------- 17. round-3 audit regressions
   {
     // (a) forgot-password: per-account daily cap means the sending quota can't be drained through one account
-    const s7 = await prisma.user.findUniqueOrThrow({ where: { email: 'student7@examguard.test' } });
+    const s7 = await prisma.user.findUniqueOrThrow({ where: { email: 'student7@examify.test' } });
     await prisma.passwordToken.createMany({ data: [1, 2, 3].map((i) => ({ userId: s7.id, purpose: 'forgot', tokenHash: `seed-cap-${i}-${Date.now()}`, expiresAt: new Date(Date.now() + 3600_000), createdAt: new Date(Date.now() - 2 * 3600_000) })) });
-    const r = await call('POST', '/auth/password/forgot', undefined, { email: '  Student7@ExamGuard.test ' });
+    const r = await call('POST', '/auth/password/forgot', undefined, { email: '  Student7@Examify.test ' });
     ok(r.status === 200 && (await prisma.passwordToken.count({ where: { userId: s7.id, purpose: 'forgot' } })) === 3, 'forgot-password is capped per account per day (same response, no new email)');
     // (b) many people setting passwords from one IP (an exam hall) are not blocked by each other
     const resets = await Promise.all(Array.from({ length: 12 }, (_, i) => call('POST', '/auth/password/reset', undefined, { token: `not-a-real-token-${i}-xxxxxxxxxxxx`, password: 'Valid@2026x' })));

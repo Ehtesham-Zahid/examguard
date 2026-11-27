@@ -10,9 +10,9 @@ import CursorGrid from '@/components/bits/CursorGrid';
 import RotatingText from '@/components/bits/RotatingText';
 
 const DEMO = [
-  { role: 'Administrator', email: 'admin@examguard.test', password: 'Admin@123' },
-  { role: 'Examiner', email: 'examiner@examguard.test', password: 'Examiner@123' },
-  { role: 'Candidate', email: 'student@examguard.test', password: 'Student@123' },
+  { role: 'Administrator', email: 'admin@examify.test', password: 'Admin@123' },
+  { role: 'Examiner', email: 'examiner@examify.test', password: 'Examiner@123' },
+  { role: 'Candidate', email: 'student@examify.test', password: 'Student@123' },
 ];
 
 export default function Login() {

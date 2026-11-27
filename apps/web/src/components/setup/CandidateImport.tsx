@@ -15,7 +15,7 @@ const SAMPLE_JSON = `[
 ]`;
 
 export function downloadCredentials(creds: NonNullable<ImportResponse['credentials']>) {
-  downloadText(`examguard-credentials-${new Date().toISOString().slice(0, 10)}.csv`, toCsv(['name', 'email', 'temporary_password'], creds.map((c) => [c.name, c.email, c.temporaryPassword])));
+  downloadText(`examify-credentials-${new Date().toISOString().slice(0, 10)}.csv`, toCsv(['name', 'email', 'temporary_password'], creds.map((c) => [c.name, c.email, c.temporaryPassword])));
 }
 
 export function CandidateImport({ open, onClose, enrollExamId }: { open: boolean; onClose: () => void; enrollExamId?: string }) {
@@ -28,7 +28,7 @@ export function CandidateImport({ open, onClose, enrollExamId }: { open: boolean
       description={enrollExamId ? 'New accounts are created and enrolled in this examination.' : 'Create many candidate accounts at once. Each gets a temporary password.'}
       endpoint="/users/import"
       extraBody={enrollExamId ? { enrollExamId } : undefined}
-      templateName="examguard-candidates-template.csv"
+      templateName="examify-candidates-template.csv"
       templateCsv={TEMPLATE}
       sampleJson={SAMPLE_JSON}
       columnsHint={

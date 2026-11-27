@@ -136,7 +136,7 @@ export default function Settings() {
 
   return (
     <div className="max-w-3xl">
-      <PageHeader title="Settings" subtitle="Personalise how ExamGuard looks and reads. Preferences are saved to your account and apply inside the exam workspace too." />
+      <PageHeader title="Settings" subtitle="Personalise how Examify looks and reads. Preferences are saved to your account and apply inside the exam workspace too." />
       {force && (
         <div role="alert" className="mb-6 rounded-xl border border-warn/40 bg-warn-soft px-4 py-3 text-sm text-warn">
           For your security, please set a new password before continuing.

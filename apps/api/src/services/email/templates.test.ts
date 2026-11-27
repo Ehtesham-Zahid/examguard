@@ -68,7 +68,7 @@ describe('calendar invite', () => {
     expect(ics.startsWith('BEGIN:VCALENDAR\r\n')).toBe(true);
     expect(ics).toContain('DTSTART:20261201T050000Z');
     expect(ics).toContain('DTEND:20261201T090000Z');
-    expect(ics).toContain('UID:exam-ex1@examguard');
+    expect(ics).toContain('UID:exam-ex1@examify');
     expect(ics).toContain('\\,');
     expect(ics).toContain('\\;');
     for (const line of ics.split('\r\n')) expect(Buffer.byteLength(line)).toBeLessThanOrEqual(75);
@@ -87,7 +87,7 @@ describe('delivery rules', () => {
     expect(wantsEmail(null, 'results_published')).toBe(true);
   });
   it('recognises reserved demo domains', () => {
-    expect(isReservedAddress('student@examguard.test')).toBe(true);
+    expect(isReservedAddress('student@examify.test')).toBe(true);
     expect(isReservedAddress('a@example.com')).toBe(true);
     expect(isReservedAddress('someone@gmail.com')).toBe(false);
     expect(isReservedAddress('x@uni.edu.pk')).toBe(false);

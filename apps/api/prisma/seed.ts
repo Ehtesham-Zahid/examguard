@@ -69,6 +69,13 @@ const COPIED = 'A stack is LIFO: the last element pushed is the first popped, li
 
 async function main() {
   if (process.env.SEED_IF_EMPTY === 'true' && (await prisma.user.count()) > 0) {
+    // one-time rename (ExamGuard → Examify): demo accounts created before the rebrand keep working under the new domain.
+    // Idempotent; only touches @examguard.test addresses whose @examify.test twin doesn't exist yet.
+    const renamed = await prisma.$executeRaw`
+      UPDATE "User" u SET "email" = replace(u."email", '@examguard.test', '@examify.test')
+      WHERE u."email" LIKE '%@examguard.test'
+        AND NOT EXISTS (SELECT 1 FROM "User" v WHERE v."email" = replace(u."email", '@examguard.test', '@examify.test'))`;
+    if (renamed) console.log(`Renamed ${renamed} demo account(s) to @examify.test`);
     console.log('Database already has data — skipping seed.');
     return;
   }
@@ -80,14 +87,14 @@ async function main() {
   ]);
 
   const hash = (p: string) => bcrypt.hash(p, 10);
-  const admin = await prisma.user.create({ data: { name: 'Sana Umer', email: 'admin@examguard.test', role: 'ADMIN', passwordHash: await hash('Admin@123') } });
-  const examiner = await prisma.user.create({ data: { name: 'Dr. Hamza Qureshi', email: 'examiner@examguard.test', role: 'EXAMINER', passwordHash: await hash('Examiner@123') } });
-  await prisma.user.create({ data: { name: 'Prof. Sana Iqbal', email: 'examiner2@examguard.test', role: 'EXAMINER', passwordHash: await hash('Examiner@123') } });
+  const admin = await prisma.user.create({ data: { name: 'Sana Umer', email: 'admin@examify.test', role: 'ADMIN', passwordHash: await hash('Admin@123') } });
+  const examiner = await prisma.user.create({ data: { name: 'Dr. Hamza Qureshi', email: 'examiner@examify.test', role: 'EXAMINER', passwordHash: await hash('Examiner@123') } });
+  await prisma.user.create({ data: { name: 'Prof. Sana Iqbal', email: 'examiner2@examify.test', role: 'EXAMINER', passwordHash: await hash('Examiner@123') } });
   const names = ['Ali Raza', 'Fatima Noor', 'Usman Tariq', 'Zainab Hussain', 'Bilal Ahmed', 'Hira Shah', 'Omar Farooq', 'Maryam Javed', 'Hassan Ali', 'Areeba Khan', 'Saad Mehmood', 'Laiba Aslam'];
   const studentPw = await hash('Student@123');
-  const candidates = [await prisma.user.create({ data: { name: 'Ahmed Khan', email: 'student@examguard.test', role: 'CANDIDATE', groupName: 'BSCS-5A', passwordHash: studentPw } })];
+  const candidates = [await prisma.user.create({ data: { name: 'Ahmed Khan', email: 'student@examify.test', role: 'CANDIDATE', groupName: 'BSCS-5A', passwordHash: studentPw } })];
   for (let i = 0; i < names.length; i++)
-    candidates.push(await prisma.user.create({ data: { name: names[i], email: `student${i + 1}@examguard.test`, role: 'CANDIDATE', groupName: i % 2 ? 'BSCS-5B' : 'BSCS-5A', passwordHash: studentPw } }));
+    candidates.push(await prisma.user.create({ data: { name: names[i], email: `student${i + 1}@examify.test`, role: 'CANDIDATE', groupName: i % 2 ? 'BSCS-5B' : 'BSCS-5A', passwordHash: studentPw } }));
   const student2 = candidates[1];
 
   console.log('Creating question bank…');
@@ -267,9 +274,9 @@ async function main() {
 
   await audit(admin.id, 'system.seed', 'System', null, { candidates: candidates.length, questions: QUESTIONS.length });
   console.log('Seed complete.');
-  console.log('  admin@examguard.test / Admin@123');
-  console.log('  examiner@examguard.test / Examiner@123');
-  console.log('  student@examguard.test / Student@123 (also student1..12@examguard.test)');
+  console.log('  admin@examify.test / Admin@123');
+  console.log('  examiner@examify.test / Examiner@123');
+  console.log('  student@examify.test / Student@123 (also student1..12@examify.test)');
 }
 
 main().finally(() => prisma.$disconnect());

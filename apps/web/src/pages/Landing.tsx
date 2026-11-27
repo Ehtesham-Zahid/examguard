@@ -100,7 +100,7 @@ function Nav() {
   return (
     <header className={cx('fixed inset-x-0 top-0 z-40 transition-all duration-300', scrolled ? 'border-b border-line bg-surface/90 shadow-[var(--shadow)] backdrop-blur' : 'bg-transparent')}>
       <nav className="mx-auto flex h-16 max-w-[1440px] items-center gap-6 px-5 sm:px-8 lg:px-10" aria-label="Main">
-        <Link to="/" aria-label="ExamGuard home">
+        <Link to="/" aria-label="Examify home">
           <Logo />
         </Link>
         <ul className="hidden items-center gap-1 md:flex">
@@ -166,7 +166,7 @@ function Hero() {
             Exams that are fair, secure and <span className="hl-swipe">survive a power cut.</span>
           </h1>
           <p className="page-enter mt-6 max-w-xl text-[21px] leading-relaxed text-ink-2" style={{ animationDelay: '0.15s' }}>
-            Create, run, monitor and grade online exams in one place. ExamGuard keeps working through dropped connections, makes every random paper equally hard, and uses no webcam.
+            Create, run, monitor and grade online exams in one place. Examify keeps working through dropped connections, makes every random paper equally hard, and uses no webcam.
           </p>
           <div className="page-enter mt-8 flex flex-wrap items-center gap-3" style={{ animationDelay: '0.25s' }}>
             <PrimaryCta to={user ? HOME[user.role] : '/login'}>{user ? 'Open your dashboard' : 'Try the live demo'}</PrimaryCta>
@@ -212,7 +212,7 @@ function Marquee() {
         logoHeight={22}
         pauseOnHover
         fadeOut={false}
-        ariaLabel="ExamGuard highlights"
+        ariaLabel="Examify highlights"
       />
     </section>
   );
@@ -353,7 +353,7 @@ function Fairness() {
         <SectionHead eyebrow="Fairness of random papers" title={<>Different papers. <span className="hl">Same difficulty.</span></>} />
         <Reveal className="-mt-6 space-y-4 text-[18px] leading-relaxed text-ink-2">
           <p>Random papers stop copying, but pure chance can hand one student a much harder exam than the next.</p>
-          <p>ExamGuard samples many papers that fit your blueprint and keeps the one closest to the target difficulty. Difficulty is recalibrated from real results, and a fairness report shows examiners the evidence.</p>
+          <p>Examify samples many papers that fit your blueprint and keeps the one closest to the target difficulty. Difficulty is recalibrated from real results, and a fairness report shows examiners the evidence.</p>
         </Reveal>
       </div>
     </section>
@@ -458,9 +458,9 @@ function How() {
 
 function Roles() {
   const roles: [typeof Users, string, string, string[]][] = [
-    [ShieldCheck, 'Administrator', 'admin@examguard.test', ['Manage users and roles', 'Verify the audit chain', 'Oversee every exam']],
-    [ClipboardList, 'Examiner', 'examiner@examguard.test', ['Build and publish exams', 'Monitor live attempts', 'Grade, publish, resolve disputes']],
-    [GraduationCap, 'Candidate', 'student@examguard.test', ['Take exams anywhere', 'Flip open your result', 'Raise a dispute in two clicks']],
+    [ShieldCheck, 'Administrator', 'admin@examify.test', ['Manage users and roles', 'Verify the audit chain', 'Oversee every exam']],
+    [ClipboardList, 'Examiner', 'examiner@examify.test', ['Build and publish exams', 'Monitor live attempts', 'Grade, publish, resolve disputes']],
+    [GraduationCap, 'Candidate', 'student@examify.test', ['Take exams anywhere', 'Flip open your result', 'Raise a dispute in two clicks']],
   ];
   return (
     <section className="border-y border-line bg-surface">
@@ -539,7 +539,7 @@ function VerifyTeaser() {
 
 function Faq() {
   const qs: [string, string][] = [
-    ['Does ExamGuard use the webcam or microphone?', "No. Integrity comes from behavioural signals (tab switches, pastes, full-screen exits and similar) that an examiner reviews. Nothing is recorded from the camera, microphone or screen."],
+    ['Does Examify use the webcam or microphone?', "No. Integrity comes from behavioural signals (tab switches, pastes, full-screen exits and similar) that an examiner reviews. Nothing is recorded from the camera, microphone or screen."],
     ['What happens if a student loses internet during the exam?', 'They keep working. Answers are stored on the device and sync automatically when the connection returns. The timer is controlled by the server, so going offline never adds time.'],
     ['How do you stop someone from getting an easier random paper?', 'Papers are generated from a topic × difficulty blueprint, and each one is balanced to the same expected difficulty. Examiners get a fairness report comparing it with pure random selection.'],
     ['Can results be faked?', 'Each published result is signed with an Ed25519 key. The public verify page checks the signature, so an edited PDF or invented code fails immediately.'],
@@ -621,9 +621,9 @@ function Footer() {
 export default function Landing() {
   useSmoothScroll();
   useEffect(() => {
-    document.title = 'ExamGuard: fair, secure, offline-proof online exams';
+    document.title = 'Examify: fair, secure, offline-proof online exams';
     return () => {
-      document.title = 'ExamGuard';
+      document.title = 'Examify';
     };
   }, []);
   return (

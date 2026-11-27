@@ -91,7 +91,7 @@ export default function AdminEmails() {
       <PageHeader
         eyebrow="Administration"
         title="Email log"
-        subtitle="Every email ExamGuard sends — exam schedules, reminders, results, dispute decisions and account links — with a preview of exactly what the recipient saw."
+        subtitle="Every email Examify sends — exam schedules, reminders, results, dispute decisions and account links — with a preview of exactly what the recipient saw."
         actions={
           <Button variant="outline" icon={<RefreshCw className={cx('size-4', list.isFetching && 'animate-spin')} />} onClick={() => list.refetch()}>
             Refresh
@@ -251,7 +251,7 @@ function DeliveryCard({ cfg }: { cfg: ListResp['config'] }) {
                 </p>
               </>
             )}
-            <p className="mt-2 text-[12px] text-muted">Demo accounts on <span className="font-mono">examguard.test</span> can never receive mail, so their emails show as “Not sent” — open one to see the preview.</p>
+            <p className="mt-2 text-[12px] text-muted">Demo accounts on <span className="font-mono">examify.test</span> can never receive mail, so their emails show as “Not sent” — open one to see the preview.</p>
           </div>
         </div>
         <form onSubmit={submit} className="border-t border-line bg-surface-2/50 p-5 lg:border-l lg:border-t-0" noValidate>

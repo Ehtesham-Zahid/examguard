@@ -251,7 +251,7 @@ function useScrollProgress<T extends HTMLElement>() {
 
 /**
  * Scroll-driven dot plot: both rows start as the same random spread of 40 papers. Scrolling pulls
- * the ExamGuard row onto the target difficulty while the pure-random row stays scattered (and
+ * the Examify row onto the target difficulty while the pure-random row stays scattered (and
  * jitters as you scroll). Scrolling back up reverses it.
  */
 export function FairnessPlot() {
@@ -280,7 +280,7 @@ export function FairnessPlot() {
         return (
           <div key={k} className="mt-5">
             <div className="mb-2 flex items-baseline justify-between text-[16px]">
-              <span className="font-semibold">{isFair ? 'Balanced by ExamGuard' : 'Picked at random'}</span>
+              <span className="font-semibold">{isFair ? 'Balanced by Examify' : 'Picked at random'}</span>
               <span className={cx('font-mono tabular text-[15px] font-bold', isFair ? (done ? 'text-ok' : 'text-ink') : 'text-danger')}>±{(isFair ? spread : 3.4).toFixed(1)} pts</span>
             </div>
             <div className="paper-grid relative h-14 overflow-hidden rounded-lg border border-line">

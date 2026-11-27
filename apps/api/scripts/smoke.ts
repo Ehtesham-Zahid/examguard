@@ -16,13 +16,13 @@ const login = async (email: string, password: string) => (await call('POST', '/a
 
 async function main() {
   // --- auth & RBAC
-  const bad = await call('POST', '/auth/login', undefined, { email: 'admin@examguard.test', password: 'nope' });
+  const bad = await call('POST', '/auth/login', undefined, { email: 'admin@examify.test', password: 'nope' });
   ok(bad.status === 401, 'wrong password rejected');
-  const admin = await login('admin@examguard.test', 'Admin@123');
-  const examiner = await login('examiner@examguard.test', 'Examiner@123');
-  const examiner2 = await login('examiner2@examguard.test', 'Examiner@123');
-  const student = await login('student@examguard.test', 'Student@123');
-  const s3 = await login('student3@examguard.test', 'Student@123');
+  const admin = await login('admin@examify.test', 'Admin@123');
+  const examiner = await login('examiner@examify.test', 'Examiner@123');
+  const examiner2 = await login('examiner2@examify.test', 'Examiner@123');
+  const student = await login('student@examify.test', 'Student@123');
+  const s3 = await login('student3@examify.test', 'Student@123');
   ok(admin && examiner && student, 'all roles can log in');
   ok((await call('GET', '/users', student)).status === 403, 'candidate cannot list users (backend RBAC)');
   ok((await call('POST', '/users', examiner, { name: 'X', email: 'x@x.com', role: 'ADMIN' })).status === 403, 'examiner cannot create users');
@@ -126,7 +126,7 @@ async function main() {
   ok(sim.json.written.length > 0, `similarity detects copied written answers (${sim.json.written[0]?.similarity}%)`);
   const fr = await call('GET', `/exams/${fair.id}/fairness`, examiner);
   ok(fr.status === 200 && fr.json.fair.sd < fr.json.naive.sd, `fair papers less variable: sd ${fr.json.fair.sd} vs naive ${fr.json.naive.sd}`);
-  const s2tok = await login('student1@examguard.test', 'Student@123');
+  const s2tok = await login('student1@examify.test', 'Student@123');
   const myRes = await call('GET', '/candidate/results', s2tok);
   ok(myRes.json.length >= 1 && myRes.json[0].certificateCode, 'candidate sees own published result with certificate');
   const code = myRes.json[0].certificateCode;

@@ -1,4 +1,4 @@
-# ExamGuard — Secure Examination Management System
+# Examify — Secure Examination Management System
 
 > Technoverse 5.0 · Web-e-Thon. A full-stack platform to **create, conduct, monitor and evaluate** online examinations that stay **fair, secure and resilient**, even when a candidate's internet or power fails.
 
@@ -8,11 +8,11 @@
 
 | Role | Email | Password |
 |---|---|---|
-| Administrator | `admin@examguard.test` | `Admin@123` |
-| Examiner | `examiner@examguard.test` | `Examiner@123` |
-| Examiner (second, owns nothing, used to show ownership isolation) | `examiner2@examguard.test` | `Examiner@123` |
-| Candidate | `student@examguard.test` | `Student@123` |
-| More candidates | `student1@examguard.test` … `student12@examguard.test` | `Student@123` |
+| Administrator | `admin@examify.test` | `Admin@123` |
+| Examiner | `examiner@examify.test` | `Examiner@123` |
+| Examiner (second, owns nothing, used to show ownership isolation) | `examiner2@examify.test` | `Examiner@123` |
+| Candidate | `student@examify.test` | `Student@123` |
+| More candidates | `student1@examify.test` … `student12@examify.test` | `Student@123` |
 
 The seed creates realistic data:
 - a **live** fixed exam (*DSA Midterm*) and a **live** fair-randomised exam (*Algorithms Quiz*)
@@ -69,7 +69,7 @@ For written answers, Claude (`claude-opus-5-5`) suggests a mark against the exam
 
 ### Email notifications
 
-ExamGuard emails candidates and staff from a Google account, through a **Google Apps Script relay** (works on any host) or **Gmail SMTP**:
+Examify emails candidates and staff from a Google account, through a **Google Apps Script relay** (works on any host) or **Gmail SMTP**:
 
 | Email | Who | When |
 |---|---|---|
@@ -86,7 +86,7 @@ ExamGuard emails candidates and staff from a Google account, through a **Google 
 * **Safe links:** password links are single-use, expire (1 h for "forgot", 24 h for admin reset, 7 days for welcome), only their SHA-256 is stored, and the link is removed from the log after delivery. "Forgot password" answers the same way for unknown emails and is rate-limited.
 * **Preferences:** candidates can turn off exam, result and dispute emails in Settings; account and security emails are always sent.
 * **Admin → Email log:** every email with a pixel-exact preview (designed and plain-text), status, errors, retry, and a "send a test email" box.
-* **Demo accounts** use the reserved `examguard.test` domain, which can never receive mail, so their emails are shown as *Not sent* (open them to preview).
+* **Demo accounts** use the reserved `examify.test` domain, which can never receive mail, so their emails are shown as *Not sent* (open them to preview).
 
 **Turning it on:** two delivery options, both sending from your Google account.
 * **Google Apps Script relay (use this on Render's free plan, which blocks SMTP):** paste [`apps/api/scripts/google-apps-script/Code.gs`](apps/api/scripts/google-apps-script/Code.gs) into a new Apps Script project, set a secret, deploy it as a Web app, then set `EMAIL_RELAY_URL` and `EMAIL_RELAY_SECRET`. Step-by-step: [`SETUP.md`](apps/api/scripts/google-apps-script/SETUP.md).

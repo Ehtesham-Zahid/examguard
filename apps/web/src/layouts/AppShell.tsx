@@ -57,7 +57,7 @@ export function Logo({ compact }: { compact?: boolean }) {
       <LogoMark />
       {!compact && (
         <span className="display text-[21px] font-bold tracking-tight">
-          exam<span className="hl">guard</span>
+          exam<span className="hl">ify</span>
         </span>
       )}
     </span>
@@ -213,7 +213,7 @@ export function AppShell() {
   const sidebar = (
     <nav aria-label="Main" className="flex h-full flex-col">
       <div className="flex h-16 items-center px-5">
-        <Link to="/app" aria-label="ExamGuard dashboard">
+        <Link to="/app" aria-label="Examify dashboard">
           <Logo />
         </Link>
       </div>

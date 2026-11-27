@@ -12,4 +12,4 @@ const server = http.createServer(createApp());
 initRealtime(server);
 startExpirySweeper();
 if (process.env.EMAIL_WORKER !== 'off') startEmailWorker();
-server.listen(config.port, () => console.log(`ExamGuard API listening on :${config.port}`));
+server.listen(config.port, () => console.log(`Examify API listening on :${config.port}`));

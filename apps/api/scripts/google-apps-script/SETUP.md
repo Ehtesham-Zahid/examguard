@@ -1,20 +1,20 @@
-# ExamGuard email relay (Google Apps Script)
+# Examify email relay (Google Apps Script)
 
-Render's free plan blocks outgoing SMTP, so ExamGuard sends email through this small Google Apps Script
+Render's free plan blocks outgoing SMTP, so Examify sends email through this small Google Apps Script
 web app instead. It runs on your Google account, sends from your Gmail, and is called over HTTPS.
 It takes about 5 minutes and is free.
 
 ## 1. Create the script
 
 1. Sign in to the Google account that should send the emails, then open <https://script.google.com>.
-2. Click **New project**. Rename it (top left) to **ExamGuard email relay**.
+2. Click **New project**. Rename it (top left) to **Examify email relay**.
 3. Delete the sample code and paste in everything from [`Code.gs`](./Code.gs).
 
 ## 2. Allow it to send email
 
 1. In the toolbar's function menu choose **testSetup**, then click **Run**.
 2. Google asks for permission: **Review permissions** → pick your account → **Advanced** →
-   **Go to ExamGuard email relay (unsafe)** → **Allow**. (It's "unverified" only because you wrote it.)
+   **Go to Examify email relay (unsafe)** → **Allow**. (It's "unverified" only because you wrote it.)
 3. The log at the bottom shows the account it sends as and how many emails are left today.
 
 ## 3. Deploy it as a web app
@@ -30,7 +30,7 @@ It takes about 5 minutes and is free.
 2. In Apps Script click **Project Settings** (gear, left) → **Script properties** → **Add script property**:
    property `RELAY_SECRET`, value = your secret → **Save script properties**. No redeploy needed.
 
-## 5. Add two environment variables to ExamGuard
+## 5. Add two environment variables to Examify
 
 On Render: **Dashboard → examguard → Environment**, add these, then **Save, rebuild, and deploy**:
 
