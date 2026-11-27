@@ -59,7 +59,7 @@ export function QuestionView({
   return (
     <article aria-labelledby={`q-${q.id}-title`} className="relative">
       <header className="mb-5 flex flex-wrap items-center gap-2">
-        <h2 id={`q-${q.id}-title`} className="display text-[22px] font-semibold">
+        <h2 id={`q-${q.id}-title`} className="display text-[24px] font-bold">
           Question {q.position}
           <span className="ml-1 text-base font-normal text-muted">/ {total}</span>
         </h2>
@@ -95,12 +95,12 @@ export function QuestionView({
                     disabled={disabled}
                     onClick={() => toggle(o.id)}
                     className={cx(
-                      'exam-text no-select flex flex-1 items-start gap-3 rounded-xl border-2 px-4 py-3 text-left transition',
-                      on ? 'border-accent bg-accent-soft' : 'border-line bg-surface hover:border-line-strong',
+                      'exam-text no-select flex flex-1 items-start gap-3 rounded-xl border-2 px-4 py-3 text-left transition-all duration-150 active:scale-[0.99]',
+                      on ? 'hl-answer border-ink bg-surface shadow-[0_2px_0_var(--ink)]' : 'border-line bg-surface hover:-translate-y-px hover:border-line-strong hover:shadow-[var(--shadow)]',
                       isStruck && !on && 'opacity-45',
                     )}
                   >
-                    <span className={cx('mt-0.5 grid size-6 shrink-0 place-items-center border-2 font-mono text-xs font-semibold', q.type === 'SINGLE' ? 'rounded-full' : 'rounded-md', on ? 'border-accent bg-accent text-accent-ink' : 'border-line-strong text-muted')}>
+                    <span className={cx('mt-0.5 grid size-6 shrink-0 place-items-center border-2 font-mono text-xs font-semibold', q.type === 'SINGLE' ? 'rounded-full' : 'rounded-md', on ? 'pop border-ink bg-ink text-surface' : 'border-line-strong text-muted')}>
                       {on ? <Check className="size-3.5" strokeWidth={3} /> : String.fromCharCode(65 + i)}
                     </span>
                     <span className={cx('min-w-0 flex-1', isStruck && 'line-through')}>

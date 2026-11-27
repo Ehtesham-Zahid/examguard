@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bell, BookOpen, ClipboardCheck, FileQuestion, Gavel, GraduationCap, LayoutDashboard, LogOut, Menu, Moon, ScrollText, Search, Settings, ShieldCheck, Sun, Users, X } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import ClickSpark from '@/components/bits/ClickSpark';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -38,13 +39,25 @@ const NAV: Record<Role, NavItem[]> = {
   ],
 };
 
+/** Ticked box with a highlighter swipe behind it; the check draws itself on mount and on hover. */
+export function LogoMark({ size = 34, animate = true }: { size?: number; animate?: boolean }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 54 54" aria-hidden className="group-hover/logo:[&_.draw-path]:animate-none">
+      <rect x="6" y="30" width="42" height="12" rx="3" fill="var(--hl)" />
+      <rect x="10" y="10" width="32" height="32" rx="5" fill="none" stroke="var(--ink)" strokeWidth="3.4" />
+      <path d="M17 26l7 7 16-19" fill="none" stroke="var(--margin)" strokeWidth="4.2" strokeLinecap="round" strokeLinejoin="round" className={animate ? 'draw-path' : undefined} />
+    </svg>
+  );
+}
 export function Logo({ compact }: { compact?: boolean }) {
   return (
-    <span className="flex items-center gap-2.5">
-      <span className="grid size-8 place-items-center rounded-lg bg-accent text-accent-ink">
-        <ShieldCheck className="size-[18px]" aria-hidden />
-      </span>
-      {!compact && <span className="display text-[19px] font-semibold tracking-tight">ExamGuard</span>}
+    <span className="group/logo flex items-center gap-2">
+      <LogoMark />
+      {!compact && (
+        <span className="display text-[21px] font-bold tracking-tight">
+          exam<span className="hl">guard</span>
+        </span>
+      )}
     </span>
   );
 }
@@ -212,7 +225,12 @@ export function AppShell() {
             <NavLink
               to={it.to}
               end={it.to.split('/').length <= 2}
-              className={({ isActive }) => cx('flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition', isActive ? 'bg-accent text-accent-ink' : 'text-ink-2 hover:bg-surface-2 hover:text-ink')}
+              className={({ isActive }) =>
+                cx(
+                  'group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold transition-all duration-200',
+                  isActive ? 'bg-hl text-hl-ink shadow-[0_2px_0_rgb(23_42_70/0.15)] [&_svg]:animate-[wiggle_0.45s_ease-in-out]' : 'text-ink-2 hover:translate-x-0.5 hover:bg-surface-2 hover:text-ink',
+                )
+              }
             >
               {it.icon}
               {it.label}
@@ -247,11 +265,11 @@ export function AppShell() {
   );
 
   return (
-    <div className="flex min-h-full">
+    <div className="grid-paper flex min-h-full">
       <a href="#main" className="skip-link">
         Skip to content
       </a>
-      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 border-r border-line bg-bg lg:block">{sidebar}</aside>
+      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 border-r border-line bg-surface lg:block">{sidebar}</aside>
       {mobile && (
         <div className="fixed inset-0 z-40 lg:hidden">
           <div className="absolute inset-0 bg-black/40" onClick={() => setMobile(false)} />
@@ -264,7 +282,7 @@ export function AppShell() {
         </div>
       )}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-line bg-bg/85 px-4 backdrop-blur sm:px-6">
+        <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-line bg-surface/85 px-4 backdrop-blur sm:px-6">
           <button className="rounded-lg p-2 hover:bg-surface-2 lg:hidden" onClick={() => setMobile(true)} aria-label="Open menu">
             <Menu className="size-5" />
           </button>
@@ -278,9 +296,11 @@ export function AppShell() {
             <Notifications />
           </div>
         </header>
-        <main id="main" className="mx-auto w-full max-w-[1280px] flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-          <Outlet />
-        </main>
+        <ClickSpark sparkColor={['#E04F5F', '#F7E64A', '#5B8FD6']} sparkSize={9} sparkRadius={18} sparkCount={7} duration={380} shape="line" className="flex-1">
+          <main id="main" key={loc.pathname} className="page-enter mx-auto w-full max-w-[1280px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+            <Outlet />
+          </main>
+        </ClickSpark>
       </div>
       <CommandPalette items={items} open={palette} onClose={() => setPalette(false)} />
     </div>

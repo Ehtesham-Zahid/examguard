@@ -1,8 +1,8 @@
 import type { Prefs } from './types';
 
 const FONTS: Record<string, string> = {
-  default: "'Instrument Sans', system-ui, sans-serif",
-  legible: "'Atkinson Hyperlegible', system-ui, sans-serif",
+  default: "'Atkinson Hyperlegible', system-ui, sans-serif",
+  legible: "'Familjen Grotesk', system-ui, sans-serif",
   dyslexic: "'Lexend', system-ui, sans-serif",
   serif: "'Source Serif 4', Georgia, serif",
   mono: "'JetBrains Mono', ui-monospace, monospace",

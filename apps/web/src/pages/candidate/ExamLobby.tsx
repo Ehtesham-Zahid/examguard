@@ -10,6 +10,7 @@ import type { Phase } from '@/lib/types';
 import { Badge, Button, Card, CardHeader, cx, ErrorBox, Field, Input, Spinner } from '@/components/ui';
 import { PhaseBadge } from '@/components/status';
 import { RichText } from '@/components/RichText';
+import SpringCheck from '@/components/bits/SpringCheck';
 
 interface Lobby {
   serverNow: string;
@@ -165,10 +166,21 @@ export default function ExamLobby() {
                   </Field>
                 )}
                 {!resuming && (
-                  <label className="mt-4 flex cursor-pointer items-start gap-2.5 text-sm">
-                    <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} className="mt-0.5 size-4 accent-[var(--accent)]" />
-                    <span className="text-ink-2">I've read the instructions and will complete this exam on my own, without outside help or AI tools.</span>
-                  </label>
+                  <div className="mt-4 rounded-lg border border-dashed border-line-strong bg-surface-2/60 p-3 text-sm text-ink-2">
+                    <SpringCheck
+                      checked={agree}
+                      onChange={setAgree}
+                      color="var(--line-strong)"
+                      fillColor="var(--ink)"
+                      checkColor="var(--hl)"
+                      boxSize={20}
+                      boxRadius={5}
+                      fontSize={14}
+                      strike="none"
+                      ariaLabel="I've read the instructions and will complete this exam on my own"
+                      label="I've read the instructions and will complete this exam on my own, without outside help or AI tools."
+                    />
+                  </div>
                 )}
                 {startErr && <p role="alert" className="mt-3 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{startErr}</p>}
                 <Button size="lg" className="mt-4 w-full" disabled={!canStart || (!resuming && !agree) || checks.some((c) => c.blocking && !c.ok)} loading={busy} onClick={start} icon={!busy && (exam.requiresAccessCode && !resuming ? <KeyRound className="size-4" /> : <PlayCircle className="size-4" />)}>

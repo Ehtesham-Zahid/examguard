@@ -15,6 +15,9 @@ import { Logo } from '@/layouts/AppShell';
 import { PreferenceControls } from '@/pages/Settings';
 import { isAnswered, QuestionView, type WAnswer, type WQuestion } from './workspace/QuestionView';
 import { Scratchpad } from './workspace/Scratchpad';
+import HoldButton from '@/components/bits/HoldButton';
+import StatusMark from '@/components/bits/StatusMark';
+import { confetti } from '@/lib/confetti';
 import { isCounted, SIGNAL_TEXT, useIntegrity, useTypingMonitor, type Signal } from './workspace/useIntegrity';
 
 interface AttemptPayload {
@@ -602,23 +605,25 @@ export default function ExamWorkspace() {
                 aria-current={i === current ? 'step' : undefined}
                 aria-label={`Question ${i + 1}: ${done ? 'answered' : a?.visited ? 'not answered' : 'not visited'}${a?.flagged ? ', marked for review' : ''}`}
                 className={cx(
-                  'relative grid h-10 w-full place-items-center rounded-lg border text-sm font-semibold tabular transition disabled:opacity-40',
-                  done ? 'border-accent bg-accent text-accent-ink' : a?.visited ? 'border-line-strong bg-surface-2 text-ink' : 'border-line bg-surface text-muted',
-                  i === current && 'ring-2 ring-info ring-offset-2 ring-offset-[var(--surface)]',
+                  'relative grid h-10 w-full place-items-center rounded-lg border-[1.5px] font-mono text-sm font-semibold tabular transition-all duration-150 hover:-translate-y-px disabled:opacity-40',
+                  done ? 'pop border-ink bg-ink text-surface' : a?.visited ? 'border-line-strong bg-surface-2 text-ink' : 'border-line bg-surface text-muted',
+                  a?.flagged && !done && 'border-dashed border-margin',
+                  i === current && 'outline-2 outline-offset-2 outline-margin',
                 )}
               >
                 {i + 1}
-                {a?.flagged && <span className="absolute -right-1 -top-1 size-3 rounded-full border-2 border-surface bg-warn" aria-hidden />}
+                {a?.flagged && <span className="pop absolute -right-1 -top-1 size-3 rounded-full border-2 border-surface bg-margin" aria-hidden />}
               </button>
             </li>
           );
         })}
       </ol>
       <ul className="mt-4 space-y-1.5 text-xs text-muted">
-        <li className="flex items-center gap-2"><span className="size-3 rounded bg-accent" /> Answered</li>
+        <li className="flex items-center gap-2"><span className="size-3 rounded bg-ink" /> Answered</li>
         <li className="flex items-center gap-2"><span className="size-3 rounded border border-line-strong bg-surface-2" /> Visited, unanswered</li>
         <li className="flex items-center gap-2"><span className="size-3 rounded border border-line bg-surface" /> Not visited</li>
-        <li className="flex items-center gap-2"><span className="size-3 rounded-full bg-warn" /> Marked for review</li>
+        <li className="flex items-center gap-2"><span className="size-3 rounded-full bg-margin" /> Marked for review</li>
+        <li className="flex items-center gap-2"><span className="size-3 rounded outline-2 outline-offset-1 outline-margin" /> Current question</li>
       </ul>
       <div className="mt-auto pt-4">
         <Button className="w-full" onClick={() => { commitTime(); setPaletteOpen(false); setReviewOpen(true); }} icon={<ClipboardList className="size-4" />}>Review & submit</Button>
@@ -627,7 +632,7 @@ export default function ExamWorkspace() {
   );
 
   return (
-    <div className="flex h-full flex-col bg-bg">
+    <div className="grid-paper flex h-full flex-col">
       <div aria-live="assertive" className="sr-only">{liveMsg}</div>
       {/* top bar */}
       <header className="z-20 flex h-16 shrink-0 items-center gap-3 border-b border-line bg-surface px-3 sm:px-5">
@@ -672,7 +677,7 @@ export default function ExamWorkspace() {
         {paletteSide !== 'hidden' && <aside className="hidden w-[260px] shrink-0 border-line bg-surface p-4 md:block md:border-r">{palette}</aside>}
         <main id="exam-main" className="relative min-w-0 flex-1 overflow-y-auto">
           <Watermark text={watermark} />
-          <div className="relative mx-auto max-w-3xl px-4 py-8 sm:px-8">
+          <div key={layout === 'single' ? current : 'all'} className="margin-line page-enter relative mx-auto max-w-3xl py-8 pl-10 pr-4 sm:pl-14 sm:pr-8 [&::before]:left-4 sm:[&::before]:left-7">
             {layout === 'single' && q && (
               <QuestionView key={q.id} q={q} a={answers[q.id]} total={questions.length} onAnswer={(r) => answer(q.id, r)} onFlag={() => persist(q.id, { flagged: !answers[q.id]?.flagged })} onTyping={(e, p) => onTyping(q.id, e, p)} disabled={paused} />
             )}
@@ -771,12 +776,15 @@ export default function ExamWorkspace() {
         description="Once submitted, you can't change your answers."
         footer={
           <>
-            <Button variant="ghost" onClick={() => setReviewOpen(false)}>Keep working</Button>
-            <Button onClick={() => submit(false)} data-autofocus>Submit exam</Button>
+            <Button variant="ghost" onClick={() => setReviewOpen(false)} data-autofocus>Keep working</Button>
+            <HoldButton holdTime={1200} backgroundColor="var(--accent)" fillColor="var(--hl)" textColor="var(--accent-ink)" fillTextColor="var(--hl-ink)" radius={10} size="md" doneLabel="Submitting…" onHold={() => submit(false)}>
+              Hold to submit
+            </HoldButton>
           </>
         }
       >
-        <div className="grid grid-cols-3 gap-3 text-center">
+        <p className="mb-3 text-xs text-muted">Press and hold the button (or hold Space/Enter on it) for a moment to submit — it prevents accidental submissions.</p>
+        <div className="stagger grid grid-cols-3 gap-3 text-center">
           <div className="rounded-xl bg-accent-soft p-3"><div className="tabular text-2xl font-semibold text-accent">{stats.answered}</div><div className="text-xs text-muted">Answered</div></div>
           <div className="rounded-xl bg-surface-2 p-3"><div className="tabular text-2xl font-semibold">{stats.unanswered}</div><div className="text-xs text-muted">Unanswered</div></div>
           <div className="rounded-xl bg-warn-soft p-3"><div className="tabular text-2xl font-semibold text-warn">{stats.flagged}</div><div className="text-xs text-muted">Marked for review</div></div>
@@ -918,13 +926,23 @@ function LockedScreen({ examId, onRetry }: { examId?: string; onRetry: () => voi
 function DoneScreen({ finish, sandbox, examId, answered, total, pending }: { finish: { status: string; reason?: string; score?: number; maxScore?: number; at: number }; sandbox: boolean; examId?: string; answered: number; total: number; pending: number }) {
   const pendingSync = finish.status === 'PENDING_SYNC';
   const forced = finish.status === 'FORCE_SUBMITTED';
+  const happy = !pendingSync && !forced;
+  useEffect(() => {
+    if (happy) setTimeout(() => confetti(), 350);
+  }, [happy]);
   return (
-    <div className="flex min-h-full items-center justify-center p-6">
-      <div className="w-full max-w-lg rounded-2xl border border-line bg-surface p-8 text-center shadow-[var(--shadow)]">
-        <div className={cx('mx-auto grid size-14 place-items-center rounded-2xl', pendingSync ? 'bg-warn-soft text-warn' : forced ? 'bg-danger-soft text-danger' : 'bg-ok-soft text-ok')}>
-          {pendingSync ? <CloudOff className="size-7" /> : forced ? <ShieldAlert className="size-7" /> : <CheckCircle2 className="size-7" />}
-        </div>
-        <h1 className="display mt-4 text-[26px] font-semibold">
+    <div className="grid-paper flex min-h-full items-center justify-center p-6">
+      <div className="pop-in w-full max-w-lg rounded-2xl border border-line bg-surface p-8 text-center shadow-[var(--shadow-lift)]">
+        {happy ? (
+          <div className="mx-auto grid w-fit place-items-center">
+            <StatusMark status="done" size={64} strokeWidth={3} color="var(--ink)" doneColor="var(--ok)" drawDuration={0.7} />
+          </div>
+        ) : (
+          <div className={cx('wiggle mx-auto grid size-14 place-items-center rounded-2xl', pendingSync ? 'bg-warn-soft text-warn' : 'bg-danger-soft text-danger')}>
+            {pendingSync ? <CloudOff className="size-7" /> : <ShieldAlert className="size-7" />}
+          </div>
+        )}
+        <h1 className="display mt-4 text-[28px] font-bold">
           {pendingSync ? "Time's up — waiting to upload" : forced ? 'Exam submitted automatically' : finish.reason === 'time_expired' || finish.status === 'AUTO_SUBMITTED' ? "Time's up — exam submitted" : 'Exam submitted'}
         </h1>
         <p className="mt-2 text-sm text-ink-2">

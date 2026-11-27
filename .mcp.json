@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "react-bits": {
+      "command": "sh",
+      "args": ["-c", "cd apps/web && npx -y shadcn@latest mcp"]
+    }
+  }
+}

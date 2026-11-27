@@ -22,7 +22,7 @@ export function PreferenceControls({ prefs, onChange, compact }: { prefs: Prefs;
       </div>
       <div>
         <div className="mb-2 text-[13px] font-medium text-ink-2">Reading font</div>
-        <div className="flex flex-wrap gap-2">{[opt('font', 'default', 'Standard'), opt('font', 'legible', 'Hyperlegible'), opt('font', 'dyslexic', 'Dyslexia-friendly'), opt('font', 'serif', 'Serif')]}</div>
+        <div className="flex flex-wrap gap-2">{[opt('font', 'default', 'Hyperlegible (default)'), opt('font', 'legible', 'Grotesk'), opt('font', 'dyslexic', 'Dyslexia-friendly'), opt('font', 'serif', 'Serif')]}</div>
       </div>
       <div>
         <label className="mb-2 flex justify-between text-[13px] font-medium text-ink-2">

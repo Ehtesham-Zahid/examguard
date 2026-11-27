@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, BadgeCheck, Check, Download, Flag, MessageSquareWarning, X } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { PolarAngleAxis, PolarGrid, Radar, RadarChart, ResponsiveContainer } from 'recharts';
 import { toast } from 'sonner';
@@ -9,6 +9,9 @@ import { fmtDate, pct } from '@/lib/format';
 import { Badge, Button, Card, CardHeader, cx, ErrorBox, Field, Modal, Select, Spinner, Stat, Textarea } from '@/components/ui';
 import { DisputeBadge } from '@/components/status';
 import { RichText } from '@/components/RichText';
+import FlipCard from '@/components/bits/FlipCard';
+import CountUp from '@/components/bits/CountUp';
+import { confetti } from '@/lib/confetti';
 
 interface Detail {
   exam: { id: string; title: string; passMarks: number; publishedAt: string };
@@ -35,6 +38,16 @@ export default function ResultDetail() {
   const qc = useQueryClient();
   const { data, isLoading, error, refetch } = useQuery({ queryKey: ['result', attemptId], queryFn: () => api<Detail>(`/candidate/attempts/${attemptId}/result`) });
   const [dispute, setDispute] = useState<{ questionId: string | null } | null>(null);
+  const [revealed, setRevealed] = useState(() => {
+    try {
+      return sessionStorage.getItem(`eg_reveal_${attemptId}`) === '1';
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    if (revealed) try { sessionStorage.setItem(`eg_reveal_${attemptId}`, '1'); } catch { /* ignore */ }
+  }, [revealed, attemptId]);
   const [category, setCategory] = useState('GRADING_ERROR');
   const [message, setMessage] = useState('');
   const [msgErr, setMsgErr] = useState('');
@@ -67,12 +80,48 @@ export default function ResultDetail() {
         </div>
       </div>
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className={cx('p-4', data.passed ? 'border-ok/40' : 'border-danger/40')}>
-          <div className="text-[13px] text-muted">Score</div>
-          <div className="tabular mt-2 text-[28px] font-semibold leading-none">{data.attempt.score}<span className="text-base text-muted"> / {data.attempt.maxScore}</span></div>
-          <Badge tone={data.passed ? 'ok' : 'danger'} className="mt-2">{data.passed ? 'Pass' : 'Fail'} · {p}%</Badge>
-        </Card>
+      <div className="mb-8 flex flex-col items-center gap-3">
+        <FlipCard
+          width={340}
+          height={200}
+          radius={18}
+          tilt
+          glare
+          glareOpacity={0.18}
+          background="var(--surface)"
+          color="var(--ink)"
+          shadowColor="#172A46"
+          shadowOpacity={0.18}
+          defaultFlipped={revealed}
+          onFlipChange={(f) => {
+            if (f && !revealed) {
+              setRevealed(true);
+              if (data.passed) confetti();
+            }
+          }}
+          ariaLabel="Result card — activate to reveal your score"
+          front={
+            <div className="grid-paper relative flex h-full w-full flex-col items-center justify-center gap-2 overflow-hidden rounded-[18px] border-2 border-ink p-6 text-center">
+              <span className="absolute inset-y-0 left-6 w-[1.5px] bg-margin/60" aria-hidden />
+              <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-2">Your result is in</span>
+              <span className="display text-2xl font-bold"><span className="hl">Tap to reveal</span></span>
+              <span className="text-xs text-muted">or press Enter</span>
+            </div>
+          }
+          back={
+            <div className={cx('relative flex h-full w-full flex-col items-center justify-center gap-1 rounded-[18px] border-2 p-6 text-center', data.passed ? 'border-ok bg-ok-soft' : 'border-danger bg-danger-soft')}>
+              <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-2">Score</span>
+              <span className="display tabular text-[46px] font-bold leading-none">
+                {revealed ? <CountUp to={data.attempt.score ?? 0} decimals={Number.isInteger(data.attempt.score) ? 0 : 1} duration={1.1} trigger="load" /> : data.attempt.score}
+                <span className="text-xl text-muted"> / {data.attempt.maxScore}</span>
+              </span>
+              <Badge tone={data.passed ? 'ok' : 'danger'} className="mt-2 text-[13px]">{data.passed ? '🎉 Passed' : 'Not passed'} · {p}%</Badge>
+            </div>
+          }
+        />
+      </div>
+
+      <div className="stagger mb-6 grid gap-4 sm:grid-cols-3">
         <Stat label="Rank" value={`${data.rank} / ${data.totalCandidates}`} hint={data.percentile !== null ? `Better than ${data.percentile}% of candidates` : undefined} />
         <Stat label="Pass mark" value={data.exam.passMarks} />
         {data.certificateCode && (

@@ -2,7 +2,9 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { BadgeCheck, Search, ShieldAlert } from 'lucide-react';
 import { api, errMsg } from '@/lib/api';
-import { Button, Card, Input, Spinner } from '@/components/ui';
+import { Button, Card, cx, Input, Spinner } from '@/components/ui';
+import StatusMark from '@/components/bits/StatusMark';
+import DecryptedText from '@/components/bits/DecryptedText';
 import { Logo } from '@/layouts/AppShell';
 
 interface Result {
@@ -33,12 +35,12 @@ export default function Verify() {
     if (input.trim()) nav(`/verify/${input.trim().toUpperCase()}`);
   };
   return (
-    <div className="min-h-full px-4 py-10">
+    <div className="grid-paper min-h-full px-4 py-10">
       <div className="mx-auto max-w-xl">
         <Link to="/" className="inline-block">
           <Logo />
         </Link>
-        <h1 className="display mt-10 text-[34px] font-semibold">Verify a result report</h1>
+        <h1 className="display mt-10 text-[36px] font-bold">Verify a <span className="hl-swipe">result report</span></h1>
         <p className="mt-2 text-ink-2">Enter the verification code printed on the report, or scan its QR code. We check the record's digital signature and show only the minimum details needed.</p>
         <form onSubmit={submit} className="mt-6 flex gap-2">
           <Input value={input} onChange={(e) => setInput(e.target.value)} placeholder="EG-XXXX-XXXX-XX" className="h-12 font-mono uppercase" aria-label="Verification code" />
@@ -48,9 +50,9 @@ export default function Verify() {
           {loading && <Spinner label="Checking signature" />}
           {error && <p className="text-danger">{error}</p>}
           {res && !loading && (
-            <Card className={res.valid ? 'border-ok/40' : 'border-danger/40'}>
+            <Card className={cx('pop-in overflow-hidden', res.valid ? 'border-ok/40' : 'border-danger/40')}>
               <div className={`flex items-center gap-3 rounded-t-xl px-5 py-4 ${res.valid ? 'bg-ok-soft text-ok' : 'bg-danger-soft text-danger'}`}>
-                {res.valid ? <BadgeCheck className="size-6" /> : <ShieldAlert className="size-6" />}
+                <StatusMark status={res.valid ? 'done' : 'failed'} size={36} strokeWidth={2.6} color="currentColor" doneColor="currentColor" errorColor="currentColor" drawDuration={0.6} />
                 <div>
                   <div className="font-semibold">{res.valid ? 'Authentic report' : 'Could not verify'}</div>
                   <div className="text-sm opacity-90">{res.valid ? 'Signature valid — issued by ExamGuard and unmodified.' : res.reason}</div>
@@ -58,15 +60,15 @@ export default function Verify() {
               </div>
               {res.payload && (
                 <dl className="grid grid-cols-2 gap-x-6 gap-y-4 p-5 text-sm">
-                  {[
+                  {([
                     ['Examination', res.payload.exam],
                     ['Candidate', res.payload.candidate],
                     ['Score', `${res.payload.score} / ${res.payload.maxScore} (${res.payload.percentage}%)`],
                     ['Result', res.payload.result],
                     ['Issued', new Date(res.payload.issuedAt).toLocaleString()],
-                    ['Code', res.payload.code],
-                  ].map(([k, v]) => (
-                    <div key={k}>
+                    ['Code', <DecryptedText key="c" text={res.payload.code} animateOn="view" sequential revealDirection="start" speed={45} className="font-mono" encryptedClassName="font-mono text-muted" />],
+                  ] as [string, React.ReactNode][]).map(([k, v]) => (
+                    <div key={k} className="pop-in">
                       <dt className="text-xs uppercase tracking-wide text-muted">{k}</dt>
                       <dd className="mt-0.5 font-medium">{v}</dd>
                     </div>

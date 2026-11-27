@@ -2,60 +2,76 @@
 
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
 
-/* Design tokens: "exam paper" palette — warm paper, ink, deep board-green accent */
+/*
+ * "Graph Notebook" design tokens
+ * Pen navy #172A46 · Highlighter #F7E64A · Margin red #E04F5F · Grid line #D6E8F5 · Page #FFFFFF
+ * Red / amber / green stay reserved for status; the highlighter is never used as text on white.
+ */
 :root {
-  --bg: #f6f4ee;
+  --bg: #ffffff;
   --surface: #ffffff;
-  --surface-2: #efece4;
-  --ink: #17191c;
-  --ink-2: #4a4f57;
-  --muted: #7a7f87;
-  --line: #e2ded3;
-  --line-strong: #cbc5b6;
-  --accent: #14532d;
-  --accent-ink: #f6f4ee;
-  --accent-soft: #e3efe6;
-  --info: #1d4ed8;
-  --info-soft: #e5ecfd;
-  --warn: #a15c07;
-  --warn-soft: #fbefd9;
-  --danger: #b42318;
-  --danger-soft: #fbe4e1;
+  --surface-2: #f2f7fc;
+  --ink: #172a46;
+  --ink-2: #3c5072;
+  --muted: #6a7b95;
+  --line: #d6e8f5;
+  --line-strong: #b3cbe2;
+  --accent: #172a46; /* pen navy — primary actions */
+  --accent-ink: #ffffff;
+  --accent-soft: #fdf6c3; /* highlighter wash behind selected things */
+  --hl: #f7e64a; /* highlighter */
+  --hl-ink: #172a46;
+  --margin: #e04f5f; /* margin line */
+  --grid: #e3eff9; /* page grid (softer than borders) */
+  --info: #2563a8;
+  --info-soft: #e5effa;
+  --warn: #9a5b06;
+  --warn-soft: #fdf1d6;
+  --danger: #c2343f;
+  --danger-soft: #fce7e9;
   --danger-ink: #ffffff;
-  --ok: #157f3c;
-  --ok-soft: #e1f3e7;
-  --focus: #2563eb;
-  --shadow: 0 1px 2px rgb(23 25 28 / 0.06), 0 4px 16px rgb(23 25 28 / 0.05);
-  --font-ui: 'Instrument Sans', system-ui, sans-serif;
-  --font-display: 'Fraunces', Georgia, serif;
+  --ok: #1d7a46;
+  --ok-soft: #e1f3e8;
+  --focus: #2563a8;
+  --shadow: 0 1px 0 rgb(23 42 70 / 0.06), 0 6px 18px -8px rgb(23 42 70 / 0.18);
+  --shadow-lift: 0 2px 0 rgb(23 42 70 / 0.08), 0 14px 28px -12px rgb(23 42 70 / 0.28);
+  --font-ui: 'Atkinson Hyperlegible', system-ui, sans-serif;
+  --font-display: 'Familjen Grotesk', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
   --exam-font: var(--font-ui);
   --exam-size: 17px;
   --exam-leading: 1.65;
   color-scheme: light;
 }
+/* Night notebook */
 [data-theme='dark'] {
-  --bg: #121417;
-  --surface: #1a1d21;
-  --surface-2: #22262b;
-  --ink: #ecebe6;
-  --ink-2: #b9bcc2;
-  --muted: #8b9098;
-  --line: #2c3036;
-  --line-strong: #3b4048;
-  --accent: #5fbf85;
-  --accent-ink: #0d1a12;
-  --accent-soft: #1b2f23;
-  --info: #7aa2ff;
-  --info-soft: #1c2640;
+  --bg: #0f1a2b;
+  --surface: #15233a;
+  --surface-2: #1e3150;
+  --ink: #e8eef7;
+  --ink-2: #b7c4d8;
+  --muted: #8295b1;
+  --line: #25395a;
+  --line-strong: #36507a;
+  --accent: #e8d93f;
+  --accent-ink: #0f1a2b;
+  --accent-soft: #2f3420;
+  --hl: #e8d93f;
+  --hl-ink: #0f1a2b;
+  --margin: #ff7d8a;
+  --grid: #172840;
+  --info: #7fb2ff;
+  --info-soft: #1b2c48;
   --warn: #f0b456;
-  --warn-soft: #3a2a12;
-  --danger: #ff8a7a;
-  --danger-soft: #3c1d1a;
-  --danger-ink: #1a0b09;
+  --warn-soft: #3a2c13;
+  --danger: #ff7d8a;
+  --danger-soft: #3b1d27;
+  --danger-ink: #1a0b0f;
   --ok: #6fd394;
-  --ok-soft: #16301f;
-  --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 6px 20px rgb(0 0 0 / 0.25);
+  --ok-soft: #15301f;
+  --focus: #e8d93f;
+  --shadow: 0 1px 0 rgb(0 0 0 / 0.3), 0 8px 22px -10px rgb(0 0 0 / 0.55);
+  --shadow-lift: 0 2px 0 rgb(0 0 0 / 0.35), 0 16px 32px -12px rgb(0 0 0 / 0.65);
   color-scheme: dark;
 }
 [data-theme='contrast'] {
@@ -70,17 +86,22 @@
   --accent: #ffd400;
   --accent-ink: #000;
   --accent-soft: #332b00;
+  --hl: #ffd400;
+  --hl-ink: #000;
+  --margin: #ff6b6b;
+  --grid: transparent;
   --info: #7dd3fc;
   --info-soft: #002233;
   --warn: #ffd400;
   --warn-soft: #332b00;
   --danger: #ff6b6b;
   --danger-soft: #330000;
-  --danger-ink: #000000;
+  --danger-ink: #000;
   --ok: #4ade80;
   --ok-soft: #002b10;
   --focus: #ffd400;
   --shadow: none;
+  --shadow-lift: none;
   color-scheme: dark;
 }
 
@@ -96,6 +117,9 @@
   --color-accent: var(--accent);
   --color-accent-ink: var(--accent-ink);
   --color-accent-soft: var(--accent-soft);
+  --color-hl: var(--hl);
+  --color-hl-ink: var(--hl-ink);
+  --color-margin: var(--margin);
   --color-info: var(--info);
   --color-info-soft: var(--info-soft);
   --color-warn: var(--warn);
@@ -116,11 +140,14 @@ body,
   height: 100%;
 }
 body {
-  background: var(--bg);
+  background-color: var(--bg);
   color: var(--ink);
   font-family: var(--font-ui);
   -webkit-font-smoothing: antialiased;
-  font-feature-settings: 'ss01', 'cv11';
+}
+::selection {
+  background: var(--hl);
+  color: var(--hl-ink);
 }
 :focus-visible {
   outline: 2px solid var(--focus);
@@ -132,8 +159,7 @@ body {
 }
 .display {
   font-family: var(--font-display);
-  font-optical-sizing: auto;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
 }
 .exam-text {
   font-family: var(--exam-font);
@@ -156,22 +182,154 @@ body {
   padding: 8px 12px;
   border-radius: 8px;
 }
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
-  }
-}
-[data-reduce-motion='true'] *,
-[data-reduce-motion='true'] *::before {
-  animation: none !important;
-  transition: none !important;
+
+/* ------------------------------------------------------------------ notebook motifs */
+/* graph paper: the app background */
+.grid-paper {
+  background-color: var(--bg);
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-position: -1px -1px;
 }
 .paper-grid {
   background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px);
-  background-size: 28px 28px;
+  background-size: 24px 24px;
+}
+/* red margin line down the left edge of a notebook page */
+.margin-line {
+  position: relative;
+}
+.margin-line::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 18px;
+  width: 1.5px;
+  background: var(--margin);
+  opacity: 0.55;
+  pointer-events: none;
+}
+/* highlighter stroke: static and animated (swipes in left → right) */
+.hl {
+  background-image: linear-gradient(transparent 58%, var(--hl) 58%, var(--hl) 92%, transparent 92%);
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  padding: 0 0.12em;
+  margin: 0 -0.12em;
+  border-radius: 2px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+.hl-swipe {
+  background-image: linear-gradient(transparent 60%, var(--hl) 60%, var(--hl) 94%, transparent 94%);
+  background-repeat: no-repeat;
+  background-size: 0% 100%;
+  animation: hl-swipe 0.7s 0.15s cubic-bezier(0.65, 0, 0.35, 1) forwards;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+@keyframes hl-swipe {
+  to {
+    background-size: 100% 100%;
+  }
+}
+/* the selected answer gets a fresh highlighter stroke every time */
+.hl-answer {
+  background-image: linear-gradient(100deg, transparent 0.4em, var(--accent-soft) 0.4em);
+  background-repeat: no-repeat;
+  background-size: 0% 100%;
+  animation: hl-swipe 0.45s cubic-bezier(0.65, 0, 0.35, 1) forwards;
+}
+/* a hand-drawn underline in margin red */
+.scribble {
+  text-decoration: underline;
+  text-decoration-color: var(--margin);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+  text-decoration-style: wavy;
+}
+
+/* ------------------------------------------------------------------ motion */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes pop {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes pop-in {
+  0% {
+    transform: scale(0.94) translateY(8px);
+    opacity: 0;
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes wiggle {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  25% {
+    transform: rotate(-8deg);
+  }
+  75% {
+    transform: rotate(8deg);
+  }
+}
+@keyframes tick {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes scribble-load {
+  0% {
+    stroke-dashoffset: 120;
+  }
+  50% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: -120;
+  }
 }
 @keyframes pulse-dot {
   0%,
@@ -182,6 +340,108 @@ body {
     opacity: 0.35;
   }
 }
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(var(--r, 0deg));
+  }
+  50% {
+    transform: translateY(-6px) rotate(var(--r, 0deg));
+  }
+}
+
+.page-enter {
+  animation: rise 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+/* children appear one after another */
+.stagger > * {
+  animation: rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.stagger > *:nth-child(1) {
+  animation-delay: 0.02s;
+}
+.stagger > *:nth-child(2) {
+  animation-delay: 0.07s;
+}
+.stagger > *:nth-child(3) {
+  animation-delay: 0.12s;
+}
+.stagger > *:nth-child(4) {
+  animation-delay: 0.17s;
+}
+.stagger > *:nth-child(5) {
+  animation-delay: 0.22s;
+}
+.stagger > *:nth-child(6) {
+  animation-delay: 0.27s;
+}
+.stagger > *:nth-child(7) {
+  animation-delay: 0.32s;
+}
+.stagger > *:nth-child(n + 8) {
+  animation-delay: 0.36s;
+}
+.pop {
+  animation: pop 0.38s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.pop-in {
+  animation: pop-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.fade-in {
+  animation: fade 0.2s ease-out both;
+}
+.wiggle {
+  animation: wiggle 0.4s ease-in-out;
+}
+.tick {
+  animation: tick 0.5s ease-out;
+}
+.float {
+  animation: float 4s ease-in-out infinite;
+}
 .pulse-dot {
   animation: pulse-dot 1.6s ease-in-out infinite;
+}
+.draw-path {
+  stroke-dasharray: 120;
+  stroke-dashoffset: 120;
+  animation: draw 0.6s 0.2s cubic-bezier(0.65, 0, 0.35, 1) forwards;
+}
+.lift {
+  transition:
+    transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.2s,
+    border-color 0.2s;
+}
+.lift:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lift);
+}
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--line) 37%, var(--surface-2) 63%);
+  background-size: 200% 100%;
+  animation: shimmer 1.3s linear infinite;
+  border-radius: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+[data-reduce-motion='true'] *,
+[data-reduce-motion='true'] *::before,
+[data-reduce-motion='true'] *::after {
+  animation-duration: 0.01ms !important;
+  animation-delay: 0ms !important;
+  transition-duration: 0.01ms !important;
 }
