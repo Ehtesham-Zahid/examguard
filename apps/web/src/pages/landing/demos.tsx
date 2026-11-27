@@ -1,8 +1,7 @@
 import { Check, CheckCircle2, Cloud, CloudOff, Loader2, Wifi, WifiOff } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Counter from '@/components/bits/Counter';
 import { cx } from '@/components/ui';
-import { useInView } from './Reveal';
 
 const OPTIONS = ['O(1)', 'O(log n)', 'O(n)', 'O(n log n)'];
 
@@ -199,44 +198,94 @@ export function OfflineDemo() {
   );
 }
 
-/** Dot plot: expected score of 40 simulated papers, pure random vs balanced. */
+/** Scroll progress of an element through the viewport (0 → 1), rAF-throttled. */
+function useScrollProgress<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  const [state, setState] = useState({ p: 0, y: 0 });
+  useEffect(() => {
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches || document.documentElement.dataset.reduceMotion === 'true';
+    if (reduce) return setState({ p: 1, y: 0 });
+    const update = () => {
+      const el = ref.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const vh = window.innerHeight;
+      // starts when the plot's top enters the lower part of the screen, completes when its centre passes 40% height
+      const start = vh * 0.9;
+      const end = vh * 0.4 - r.height / 2;
+      const p = Math.min(1, Math.max(0, (start - r.top) / (start - end)));
+      setState((s) => (Math.abs(s.p - p) < 0.002 && Math.abs(s.y - window.scrollY) < 2 ? s : { p, y: window.scrollY }));
+    };
+    update();
+    window.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    return () => {
+      window.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
+    };
+  }, []);
+  return [ref, state.p, state.y] as const;
+}
+
+/**
+ * Scroll-driven dot plot: both rows start as the same random spread of 40 papers. Scrolling pulls
+ * the ExamGuard row onto the target difficulty while the pure-random row stays scattered (and
+ * jitters as you scroll). Scrolling back up reverses it.
+ */
 export function FairnessPlot() {
-  const [ref, inView] = useInView<HTMLDivElement>();
+  const [ref, p, scrollY] = useScrollProgress<HTMLDivElement>();
   const rows = useMemo(() => {
     let seed = 7;
     const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
     const gauss = () => (rnd() + rnd() + rnd() - 1.5) / 1.5;
-    return {
-      naive: Array.from({ length: 40 }, () => 50 + gauss() * 3.4 * 2.6),
-      fair: Array.from({ length: 40 }, () => 50 + gauss() * 0.1 * 2.6),
-    };
+    const naive = Array.from({ length: 40 }, () => 50 + gauss() * 3.4 * 2.6);
+    const fair = Array.from({ length: 40 }, () => 50 + gauss() * 0.1 * 2.6);
+    return { naive, fair };
   }, []);
+  const ease = (t: number) => 1 - Math.pow(1 - t, 3);
+  const e = ease(p);
   const x = (v: number) => `${Math.min(98, Math.max(2, ((v - 38) / 24) * 100))}%`;
+  const spread = 3.4 + (0.1 - 3.4) * e;
+  const done = p >= 0.999;
   return (
     <div ref={ref} className="rounded-2xl border-2 border-ink bg-surface p-5 shadow-[6px_6px_0_var(--ink)] sm:p-6">
-      <div className="font-mono text-[12px] font-semibold uppercase tracking-[0.14em] text-muted">Expected score of 40 randomised papers</div>
-      {(['naive', 'fair'] as const).map((k) => (
-        <div key={k} className="mt-5">
-          <div className="mb-2 flex items-baseline justify-between text-sm">
-            <span className="font-semibold">{k === 'naive' ? 'Picked at random' : 'Balanced by ExamGuard'}</span>
-            <span className={cx('font-mono text-[14px] font-bold', k === 'naive' ? 'text-danger' : 'text-ok')}>{k === 'naive' ? '±3.4 pts' : '±0.1 pts'}</span>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="font-mono text-[12px] font-semibold uppercase tracking-[0.14em] text-muted">Expected score of 40 randomised papers</div>
+        <span className={cx('rounded-full px-2.5 py-1 font-mono text-[12px] font-bold transition-colors', done ? 'bg-ok-soft text-ok' : 'bg-hl text-hl-ink')}>{done ? 'balanced ✓' : 'scroll to balance ↓'}</span>
+      </div>
+      {(['naive', 'fair'] as const).map((k) => {
+        const isFair = k === 'fair';
+        return (
+          <div key={k} className="mt-5">
+            <div className="mb-2 flex items-baseline justify-between text-[16px]">
+              <span className="font-semibold">{isFair ? 'Balanced by ExamGuard' : 'Picked at random'}</span>
+              <span className={cx('font-mono tabular text-[15px] font-bold', isFair ? (done ? 'text-ok' : 'text-ink') : 'text-danger')}>±{(isFair ? spread : 3.4).toFixed(1)} pts</span>
+            </div>
+            <div className="paper-grid relative h-14 overflow-hidden rounded-lg border border-line">
+              <span className="absolute inset-y-0 left-1/2 w-[2px] -translate-x-1/2 bg-margin/70" aria-hidden />
+              {/* the target zone narrows as the papers get balanced */}
+              {isFair && <span className="absolute inset-y-0 left-1/2 -translate-x-1/2 bg-hl/25" style={{ width: `${Math.max(3, (spread / 3.4) * 60)}%` }} aria-hidden />}
+              {rows.naive.map((nv, i) => {
+                const v = isFair ? nv + (rows.fair[i] - nv) * e : nv + Math.sin(scrollY / 90 + i * 1.7) * 0.9;
+                return (
+                  <span
+                    key={i}
+                    className={cx('absolute top-1/2 size-3 -translate-x-1/2 rounded-full border-2 border-ink', isFair ? 'bg-hl' : 'bg-surface')}
+                    style={{ left: x(v), marginTop: `${((i % 5) - 2) * 7 * (isFair ? 1 - e * 0.35 : 1) - 6}px`, transition: 'left 90ms linear, margin-top 90ms linear' }}
+                  />
+                );
+              })}
+            </div>
           </div>
-          <div className="paper-grid relative h-14 overflow-hidden rounded-lg border border-line">
-            <span className="absolute inset-y-0 left-1/2 w-[2px] -translate-x-1/2 bg-margin/70" aria-hidden />
-            {rows[k].map((v, i) => (
-              <span
-                key={i}
-                className={cx('absolute top-1/2 size-3 -translate-x-1/2 rounded-full border-2 transition-all duration-700', k === 'naive' ? 'border-ink bg-surface' : 'border-ink bg-hl')}
-                style={{ left: inView ? x(v) : '50%', marginTop: `${((i % 5) - 2) * 7 - 6}px`, opacity: inView ? 1 : 0, transitionDelay: `${i * 18}ms` }}
-              />
-            ))}
-          </div>
-        </div>
-      ))}
-      <div className="mt-3 flex justify-between font-mono text-[11px] text-muted">
+        );
+      })}
+      <div className="mt-3 flex justify-between font-mono text-[12px] text-muted">
         <span>easier paper</span>
         <span className="text-margin">target</span>
         <span>harder paper</span>
+      </div>
+      <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-surface-2" role="progressbar" aria-label="Balancing progress" aria-valuenow={Math.round(p * 100)} aria-valuemin={0} aria-valuemax={100}>
+        <div className="h-full rounded-full bg-ink" style={{ width: `${p * 100}%` }} />
       </div>
     </div>
   );
