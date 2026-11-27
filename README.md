@@ -43,6 +43,10 @@ To run everything in Docker instead: `docker compose up --build`, then open http
 ```bash
 pnpm --filter api test     # unit tests: marking engine, timing, fair paper generator, similarity
 pnpm --filter api smoke    # 54-check end-to-end API test against a freshly seeded DB with the API running
+pnpm --filter api scenarios  # 62 scenario checks (expiry sweeper, violation limit, device switch, power-cut reopen,
+                             # offline merge after deadline, pause/resume, version pinning, disputes, account security).
+                             # Rewrites timestamps directly — run it against a dedicated, freshly seeded database:
+                             # DATABASE_URL=<test db> API=http://localhost:<port>/api pnpm --filter api scenarios
 ```
 
 The smoke test covers RBAC, ownership isolation, lifecycle rules, time windows, answer-key secrecy, idempotent autosave, rejecting late answers, single-device sessions, exactly-once submission under concurrent requests, grading validation, publishing guards, analytics, collusion detection, fairness, PDF access control, signature verification, dispute re-grading, sandbox isolation, CSV import validation and audit-chain integrity.
