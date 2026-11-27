@@ -10,7 +10,8 @@ const FONTS: Record<string, string> = {
 
 export function applyPrefs(p: Prefs) {
   const root = document.documentElement;
-  let theme = p.theme ?? 'system';
+  // light is the default on every device; dark / high contrast / system are opt-in from Settings
+  let theme = p.theme ?? 'light';
   if (theme === 'system') theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   root.dataset.theme = theme;
   root.dataset.reduceMotion = String(!!p.reduceMotion);
@@ -38,7 +39,7 @@ export function watchSystemTheme() {
   const mq = window.matchMedia('(prefers-color-scheme: dark)');
   const h = () => {
     const p = localPrefs();
-    if ((p.theme ?? 'system') === 'system') applyPrefs(p);
+    if (p.theme === 'system') applyPrefs(p);
   };
   mq.addEventListener?.('change', h);
   return () => mq.removeEventListener?.('change', h);

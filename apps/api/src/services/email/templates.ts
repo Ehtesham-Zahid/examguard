@@ -196,10 +196,10 @@ function layout(d: Doc): Rendered {
     <tr><td style="padding:0 4px 16px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
         <td style="vertical-align:middle;">
-          <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+          <a href="${esc(config.publicUrl)}" target="_blank" style="text-decoration:none;color:${C.ink};"><table role="presentation" cellpadding="0" cellspacing="0"><tr>
             <td style="width:34px;height:34px;background:${C.ink};border-radius:9px;text-align:center;vertical-align:middle;font-family:${SANS};font-size:18px;font-weight:800;color:${C.hl};">E</td>
             <td style="padding-left:10px;font-family:${SANS};font-size:20px;font-weight:800;letter-spacing:-0.3px;color:${C.ink};">Examify</td>
-          </tr></table>
+          </tr></table></a>
         </td>
         <td align="right" style="vertical-align:middle;font-family:${MONO};font-size:11px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:${C.muted};">${esc(d.eyebrow)}</td>
       </tr></table>

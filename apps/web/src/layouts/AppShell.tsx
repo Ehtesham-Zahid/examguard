@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bell, BookOpen, ClipboardCheck, FileQuestion, Gavel, GraduationCap, LayoutDashboard, LogOut, Menu, Moon, ScrollText, Search, Settings, ShieldCheck, Sun, Users, X, Mail } from 'lucide-react';
+import { Bell, BookOpen, ClipboardCheck, FileQuestion, Gavel, GraduationCap, LayoutDashboard, LogOut, Menu, ScrollText, Search, Settings, ShieldCheck, Users, X, Mail } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import ClickSpark from '@/components/bits/ClickSpark';
@@ -9,7 +9,6 @@ import { useAuth } from '@/lib/auth';
 import { getSocket } from '@/lib/socket';
 import { relative } from '@/lib/format';
 import { cx, Kbd } from '@/components/ui';
-import { useThemeMode } from '@/lib/theme';
 import type { Role } from '@/lib/types';
 
 interface NavItem {
@@ -51,8 +50,9 @@ export function LogoMark({ size = 34, animate = true }: { size?: number; animate
     </svg>
   );
 }
-export function Logo({ compact }: { compact?: boolean }) {
-  return (
+/** The Examify wordmark. Pass `to` to make it a link (it goes to the landing page everywhere except inside an exam). */
+export function Logo({ compact, to }: { compact?: boolean; to?: string }) {
+  const mark = (
     <span className="group/logo flex items-center gap-2">
       <LogoMark />
       {!compact && (
@@ -61,6 +61,12 @@ export function Logo({ compact }: { compact?: boolean }) {
         </span>
       )}
     </span>
+  );
+  if (!to) return mark;
+  return (
+    <Link to={to} aria-label="Examify home" className="inline-flex w-fit rounded-lg">
+      {mark}
+    </Link>
   );
 }
 
@@ -188,7 +194,7 @@ function CommandPalette({ items, open, onClose }: { items: NavItem[]; open: bool
 }
 
 export function AppShell() {
-  const { user, logout, updatePrefs } = useAuth();
+  const { user, logout } = useAuth();
   const [mobile, setMobile] = useState(false);
   const [palette, setPalette] = useState(false);
   const loc = useLocation();
@@ -204,8 +210,6 @@ export function AppShell() {
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
   }, []);
-  const mode = useThemeMode(); // hooks before any early return
-  const dark = mode === 'dark';
   if (!user) return null;
   const items = NAV[user.role];
   const roleLabel = { ADMIN: 'Administrator', EXAMINER: 'Examiner', CANDIDATE: 'Candidate' }[user.role];
@@ -213,9 +217,7 @@ export function AppShell() {
   const sidebar = (
     <nav aria-label="Main" className="flex h-full flex-col">
       <div className="flex h-16 items-center px-5">
-        <Link to="/app" aria-label="Examify dashboard">
-          <Logo />
-        </Link>
+        <Logo to="/" />
       </div>
       <div className="px-3">
         <button onClick={() => setPalette(true)} className="mb-4 flex w-full items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-left text-[13px] text-muted hover:border-line-strong">
@@ -290,15 +292,9 @@ export function AppShell() {
             <Menu className="size-5" />
           </button>
           <span className="lg:hidden">
-            <Logo compact />
+            <Logo compact to="/" />
           </span>
           <div className="ml-auto flex items-center gap-1">
-            {/* high contrast is an accessibility choice made in Settings: the quick toggle must not silently undo it */}
-            {mode !== 'contrast' && (
-              <button onClick={() => updatePrefs({ theme: dark ? 'light' : 'dark' })} className="rounded-lg p-2 text-ink-2 hover:bg-surface-2" aria-label={dark ? 'Switch to light theme' : 'Switch to dark theme'}>
-                {dark ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />}
-              </button>
-            )}
             <Notifications />
           </div>
         </header>

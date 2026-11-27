@@ -47,9 +47,7 @@ export default function Verify() {
   return (
     <div className="grid-paper min-h-full px-4 py-10">
       <div className="mx-auto max-w-xl">
-        <Link to="/" className="inline-block">
-          <Logo />
-        </Link>
+        <Logo to="/" />
         <h1 className="display mt-10 text-[36px] font-bold">Verify a <span className="hl-swipe">result report</span></h1>
         <p className="mt-2 text-ink-2">Enter the verification code printed on the report, or scan its QR code. We check the record's digital signature and show only the minimum details needed.</p>
         <form onSubmit={submit} className="mt-6 flex gap-2">

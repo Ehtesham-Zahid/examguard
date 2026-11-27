@@ -10,8 +10,86 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Familjen+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;600;700&family=Lexend:wght@400;600&family=Source+Serif+4:wght@400;600&display=swap" rel="stylesheet" />
     <title>Examify</title>
+    <style>
+      /* First-visit loader (once per browser session, never inside a running exam). Pure CSS so it paints before the app loads. */
+      #splash{display:none}
+      html.splash-on body{overflow:hidden}
+      html.splash-on #splash{display:grid}
+      #splash{position:fixed;inset:0;z-index:2147483000;place-items:center;overflow:hidden;background-color:#fff;
+        background-image:linear-gradient(#d6e8f5 1px,transparent 1px),linear-gradient(90deg,#d6e8f5 1px,transparent 1px);background-size:28px 28px;
+        font-family:'Familjen Grotesk',system-ui,sans-serif;color:#172a46;transition:transform .75s cubic-bezier(.7,0,.2,1),opacity .75s ease}
+      #splash .margin{position:absolute;inset:0 auto 0 64px;width:1.5px;background:rgba(224,79,95,.55)}
+      #splash .tape{position:absolute;left:-10%;width:120%;height:46px;display:flex;align-items:center;overflow:hidden;background:#172a46;box-shadow:0 6px 0 rgba(23,42,70,.12)}
+      #splash .tape.a{top:20%;transform:rotate(-7deg)}
+      #splash .tape.b{bottom:18%;transform:rotate(5deg);background:#f7e64a}
+      #splash .track{display:flex;white-space:nowrap;animation:sp-marquee 26s linear infinite;font:700 15px/1 'JetBrains Mono',ui-monospace,monospace;letter-spacing:.22em;text-transform:uppercase}
+      #splash .tape.a .track{color:#fff}
+      #splash .tape.b .track{color:#172a46;animation-direction:reverse;animation-duration:32s}
+      #splash .track span{padding-right:2.2em}
+      #splash .card{position:relative;display:grid;justify-items:center;gap:22px;padding:52px 72px 44px;background:#fff;border:2px solid #172a46;border-radius:20px;box-shadow:8px 8px 0 #172a46;
+        animation:sp-in .7s cubic-bezier(.2,.9,.25,1.15) both}
+      #splash .brand{display:flex;align-items:center;gap:18px}
+      #splash .word{font-weight:700;font-size:76px;letter-spacing:-.03em;line-height:1}
+      #splash .word i{font-style:normal;padding:0 .08em;background:linear-gradient(#f7e64a,#f7e64a) no-repeat 0 78%/0% 42%;animation:sp-hl .7s .55s cubic-bezier(.5,0,.2,1) forwards}
+      #splash .check{stroke-dasharray:40;stroke-dashoffset:40;animation:sp-draw .6s .35s ease-out forwards}
+      #splash .tag{font:700 13px/1 'JetBrains Mono',ui-monospace,monospace;letter-spacing:.26em;text-transform:uppercase;color:#5a6a84}
+      #splash .bar{position:relative;width:320px;height:10px;border:2px solid #172a46;border-radius:99px;overflow:hidden;background:#fff}
+      #splash .bar b{position:absolute;inset:0 auto 0 0;width:0;background:#172a46;border-radius:99px;animation:sp-load 1.7s .2s cubic-bezier(.3,.6,.3,1) forwards}
+      html.splash-done #splash .bar b{width:100%!important;transition:width .25s ease}
+      html.splash-out #splash{transform:translateY(-100%);opacity:.6}
+      html.splash-out #splash .card{animation:none;transform:scale(.97);transition:transform .5s ease}
+      @keyframes sp-marquee{to{transform:translateX(-50%)}}
+      @keyframes sp-in{from{opacity:0;transform:translateY(14px) scale(.96)}to{opacity:1;transform:none}}
+      @keyframes sp-draw{to{stroke-dashoffset:0}}
+      @keyframes sp-hl{to{background-size:100% 42%}}
+      @keyframes sp-load{0%{width:0}60%{width:62%}100%{width:86%}}
+      @media (max-width:640px){#splash .word{font-size:46px}#splash .brand svg{width:56px;height:56px}#splash .card{padding:34px 30px 28px}#splash .margin{left:24px}#splash .bar{width:180px}}
+      @media (prefers-reduced-motion:reduce){#splash *{animation-duration:.01ms!important;animation-iteration-count:1!important}#splash .track{animation:none}#splash{transition:opacity .3s}html.splash-out #splash{transform:none;opacity:0}}
+    </style>
+    <script>
+      (function () {
+        var start = performance.now();
+        try {
+          if (location.pathname.indexOf('/exam/') === 0) return; // never delay a candidate reloading a running exam
+          if (sessionStorage.getItem('ex_splash')) return; // later loads keep the small inline loader
+          sessionStorage.setItem('ex_splash', '1');
+        } catch (e) {}
+        document.documentElement.classList.add('splash-on');
+        window.__hideSplash = function () {
+          var root = document.documentElement;
+          if (!root.classList.contains('splash-on') || root.classList.contains('splash-out')) return;
+          var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+          var wait = Math.max(0, (reduce ? 500 : 1900) - (performance.now() - start));
+          setTimeout(function () {
+            root.classList.add('splash-done');
+            setTimeout(function () {
+              root.classList.add('splash-out');
+              setTimeout(function () {
+                var el = document.getElementById('splash');
+                if (el) el.remove();
+                root.classList.remove('splash-on', 'splash-out', 'splash-done');
+              }, 800);
+            }, 260);
+          }, wait);
+        };
+        setTimeout(function () { window.__hideSplash && window.__hideSplash(); }, 6000); // safety net if the app never reports in
+      })();
+    </script>
   </head>
   <body>
+    <div id="splash" role="status" aria-label="Loading Examify">
+      <div class="margin" aria-hidden="true"></div>
+      <div class="tape a" aria-hidden="true"><div class="track"><span>FAIR PAPERS ✦</span><span>OFFLINE-PROOF ✦</span><span>SIGNED RESULTS ✦</span><span>PRIVACY-FIRST ✦</span><span>AI-ASSISTED MARKING ✦</span><span>LIVE MONITORING ✦</span><span>FAIR PAPERS ✦</span><span>OFFLINE-PROOF ✦</span><span>SIGNED RESULTS ✦</span><span>PRIVACY-FIRST ✦</span><span>AI-ASSISTED MARKING ✦</span><span>LIVE MONITORING ✦</span><span>FAIR PAPERS ✦</span><span>OFFLINE-PROOF ✦</span><span>SIGNED RESULTS ✦</span><span>PRIVACY-FIRST ✦</span><span>AI-ASSISTED MARKING ✦</span><span>LIVE MONITORING ✦</span><span>FAIR PAPERS ✦</span><span>OFFLINE-PROOF ✦</span><span>SIGNED RESULTS ✦</span><span>PRIVACY-FIRST ✦</span><span>AI-ASSISTED MARKING ✦</span><span>LIVE MONITORING ✦</span></div></div>
+      <div class="tape b" aria-hidden="true"><div class="track"><span>FAIR PAPERS ✦</span><span>OFFLINE-PROOF ✦</span><span>SIGNED RESULTS ✦</span><span>PRIVACY-FIRST ✦</span><span>AI-ASSISTED MARKING ✦</span><span>LIVE MONITORING ✦</span><span>FAIR PAPERS ✦</span><span>OFFLINE-PROOF ✦</span><span>SIGNED RESULTS ✦</span><span>PRIVACY-FIRST ✦</span><span>AI-ASSISTED MARKING ✦</span><span>LIVE MONITORING ✦</span><span>FAIR PAPERS ✦</span><span>OFFLINE-PROOF ✦</span><span>SIGNED RESULTS ✦</span><span>PRIVACY-FIRST ✦</span><span>AI-ASSISTED MARKING ✦</span><span>LIVE MONITORING ✦</span><span>FAIR PAPERS ✦</span><span>OFFLINE-PROOF ✦</span><span>SIGNED RESULTS ✦</span><span>PRIVACY-FIRST ✦</span><span>AI-ASSISTED MARKING ✦</span><span>LIVE MONITORING ✦</span></div></div>
+      <div class="card">
+        <div class="brand">
+          <svg width="80" height="80" viewBox="0 0 54 54" aria-hidden="true"><rect x="6" y="30" width="42" height="12" rx="3" fill="#F7E64A"/><rect x="10" y="10" width="32" height="32" rx="5" fill="none" stroke="#172A46" stroke-width="3.4"/><path class="check" d="M17 26l7 7 16-19" fill="none" stroke="#E04F5F" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="word">exam<i>ify</i></span>
+        </div>
+        <div class="tag">Secure examinations</div>
+        <div class="bar" aria-hidden="true"><b></b></div>
+      </div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

@@ -26,3 +26,11 @@ createRoot(document.getElementById('root')!).render(
     </QueryClientProvider>
   </StrictMode>,
 );
+
+// the first-visit loader (index.html) lifts away once the app has painted
+declare global {
+  interface Window {
+    __hideSplash?: () => void;
+  }
+}
+requestAnimationFrame(() => requestAnimationFrame(() => window.__hideSplash?.()));

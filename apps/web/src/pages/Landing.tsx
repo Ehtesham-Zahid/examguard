@@ -100,9 +100,7 @@ function Nav() {
   return (
     <header className={cx('fixed inset-x-0 top-0 z-40 transition-all duration-300', scrolled ? 'border-b border-line bg-surface/90 shadow-[var(--shadow)] backdrop-blur' : 'bg-transparent')}>
       <nav className="mx-auto flex h-16 max-w-[1440px] items-center gap-6 px-5 sm:px-8 lg:px-10" aria-label="Main">
-        <Link to="/" aria-label="Examify home">
-          <Logo />
-        </Link>
+        <Logo to="/" />
         <ul className="hidden items-center gap-1 md:flex">
           {links.map(([href, label]) => (
             <li key={href}>
@@ -600,7 +598,7 @@ function Footer() {
   return (
     <footer className="border-t border-line bg-surface">
       <div className="mx-auto flex max-w-[1440px] flex-wrap items-center justify-between gap-4 px-5 py-8 sm:px-8 lg:px-10">
-        <Logo />
+        <Logo to="/" />
         <p className="font-mono text-[13px] text-muted">Technoverse 5.0 · Web-e-Thon · Secure Examination Management System</p>
         <div className="flex gap-4 text-sm font-semibold text-ink-2">
           <Link to="/login" className="hover:text-ink">

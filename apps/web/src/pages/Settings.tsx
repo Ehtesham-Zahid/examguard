@@ -8,7 +8,8 @@ import type { Prefs, User } from '@/lib/types';
 import { Button, Card, CardHeader, cx, Field, Input, PageHeader, Toggle } from '@/components/ui';
 import { localPrefs } from '@/lib/theme';
 
-export function PreferenceControls({ prefs, onChange, compact }: { prefs: Prefs; onChange: (p: Prefs) => void; compact?: boolean }) {
+export function PreferenceControls({ prefs: raw, onChange, compact }: { prefs: Prefs; onChange: (p: Prefs) => void; compact?: boolean }) {
+  const prefs: Prefs = { ...raw, theme: raw.theme ?? 'light' }; // light is the default theme
   const opt = <K extends keyof Prefs>(k: K, v: Prefs[K], label: string) => (
     <button key={String(v)} type="button" onClick={() => onChange({ [k]: v } as Prefs)} aria-pressed={prefs[k] === v} className={cx('rounded-lg border px-3 py-2 text-sm transition', prefs[k] === v ? 'border-accent bg-accent-soft font-medium text-accent' : 'border-line hover:border-line-strong')}>
       {label}
@@ -16,10 +17,13 @@ export function PreferenceControls({ prefs, onChange, compact }: { prefs: Prefs;
   );
   return (
     <div className={cx('grid gap-5', !compact && 'sm:grid-cols-2')}>
-      <div>
-        <div className="mb-2 text-[13px] font-medium text-ink-2">Theme</div>
-        <div className="flex flex-wrap gap-2">{[opt('theme', 'light', 'Light'), opt('theme', 'dark', 'Dark'), opt('theme', 'contrast', 'High contrast'), opt('theme', 'system', 'System')]}</div>
-      </div>
+      {/* the theme is chosen here in Settings only — not in the exam's display panel (compact) or anywhere else */}
+      {!compact && (
+        <div>
+          <div className="mb-2 text-[13px] font-medium text-ink-2">Theme</div>
+          <div className="flex flex-wrap gap-2">{[opt('theme', 'light', 'Light (default)'), opt('theme', 'dark', 'Dark'), opt('theme', 'contrast', 'High contrast'), opt('theme', 'system', 'Match my device')]}</div>
+        </div>
+      )}
       <div>
         <div className="mb-2 text-[13px] font-medium text-ink-2">Reading font</div>
         <div className="flex flex-wrap gap-2">{[opt('font', 'default', 'Hyperlegible (default)'), opt('font', 'legible', 'Grotesk'), opt('font', 'dyslexic', 'Dyslexia-friendly'), opt('font', 'serif', 'Serif')]}</div>

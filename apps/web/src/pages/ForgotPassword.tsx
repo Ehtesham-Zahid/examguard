@@ -11,7 +11,7 @@ export function AuthCard({ children }: { children: React.ReactNode }) {
     <main className="grid-paper grid min-h-dvh place-items-center px-5 py-12">
       <div className="page-enter w-full max-w-[430px] rounded-2xl border-2 border-ink bg-surface p-7 shadow-[6px_6px_0_var(--ink)] sm:p-8">
         <div className="mb-7">
-          <Logo />
+          <Logo to="/" />
         </div>
         {children}
       </div>
