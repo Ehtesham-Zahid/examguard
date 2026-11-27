@@ -131,6 +131,46 @@ The smoke test covers RBAC, ownership isolation, lifecycle rules, time windows, 
 
 ---
 
+## Design: "Graph Notebook"
+
+The interface is styled like rough-work paper. The design is student-friendly, and it ties in with the built-in scratchpad.
+
+**Palette**
+- Pen navy `#172A46` for primary actions
+- Highlighter `#F7E64A` for the selected answer, active navigation and key words
+- Margin red `#E04F5F` for the margin line, the current question and flags
+- Grid line `#D6E8F5` for graph-paper backgrounds
+- Page `#FFFFFF`
+
+Red, amber and green stay reserved for status. A "night notebook" dark mode and a high-contrast theme are included.
+
+**Type**
+- Familjen Grotesk (headings)
+- Atkinson Hyperlegible (body, chosen for accessibility)
+- JetBrains Mono (timers and codes)
+
+**Motion** (all disabled for *reduce motion*)
+- Highlighter swipes on titles and on the selected answer
+- Staggered entrances, page transitions and pop-in dialogs
+- Confetti on submission and on passing results
+
+**[React Bits](https://reactbits.dev) components** (`apps/web/src/components/bits`)
+| Component | Where it is used |
+|---|---|
+| CursorGrid | Login page: the graph paper lights up under the cursor |
+| RotatingText | Login headline |
+| HoldButton | **Hold to submit**, which prevents accidental submissions |
+| SpringCheck | Honour pledge |
+| StatusMark | "Submitted" and "verified" checks |
+| FlipCard + CountUp | Result reveal |
+| DecryptedText | Verification code |
+| ClickSpark | Click sparks in the app shell |
+| CountUp | Dashboard stats |
+
+The React Bits registry is configured in `apps/web/components.json`. `.mcp.json` registers the shadcn MCP server, so Claude Code can browse and add React Bits components in this repo.
+
+---
+
 ## Architecture
 
 ```

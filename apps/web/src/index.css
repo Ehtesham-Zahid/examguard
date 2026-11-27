@@ -21,6 +21,7 @@
   --accent-soft: #fdf6c3; /* highlighter wash behind selected things */
   --hl: #f7e64a; /* highlighter */
   --hl-ink: #172a46;
+  --hl-wash: #f7e64a; /* highlighter stroke behind text */
   --margin: #e04f5f; /* margin line */
   --grid: #e3eff9; /* page grid (softer than borders) */
   --info: #2563a8;
@@ -58,6 +59,7 @@
   --accent-soft: #2f3420;
   --hl: #e8d93f;
   --hl-ink: #0f1a2b;
+  --hl-wash: rgb(232 217 63 / 0.34);
   --margin: #ff7d8a;
   --grid: #172840;
   --info: #7fb2ff;
@@ -88,6 +90,7 @@
   --accent-soft: #332b00;
   --hl: #ffd400;
   --hl-ink: #000;
+  --hl-wash: rgb(255 212 0 / 0.45);
   --margin: #ff6b6b;
   --grid: transparent;
   --info: #7dd3fc;
@@ -212,7 +215,7 @@ body {
 }
 /* highlighter stroke: static and animated (swipes in left → right) */
 .hl {
-  background-image: linear-gradient(transparent 58%, var(--hl) 58%, var(--hl) 92%, transparent 92%);
+  background-image: linear-gradient(transparent 58%, var(--hl-wash) 58%, var(--hl-wash) 92%, transparent 92%);
   background-repeat: no-repeat;
   background-size: 100% 100%;
   padding: 0 0.12em;
@@ -222,7 +225,7 @@ body {
   -webkit-box-decoration-break: clone;
 }
 .hl-swipe {
-  background-image: linear-gradient(transparent 60%, var(--hl) 60%, var(--hl) 94%, transparent 94%);
+  background-image: linear-gradient(transparent 60%, var(--hl-wash) 60%, var(--hl-wash) 94%, transparent 94%);
   background-repeat: no-repeat;
   background-size: 0% 100%;
   animation: hl-swipe 0.7s 0.15s cubic-bezier(0.65, 0, 0.35, 1) forwards;

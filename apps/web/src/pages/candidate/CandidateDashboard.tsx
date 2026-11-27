@@ -87,7 +87,7 @@ export default function CandidateDashboard() {
           />
         </Card>
       )}
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div key={tab} className="stagger grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {list.map((e) => (
           <ExamCard key={e.id} e={e} now={now + offset} />
         ))}
@@ -101,7 +101,7 @@ function ExamCard({ e, now }: { e: CandidateExam; now: number }) {
   const closesIn = new Date(e.windowEnd).getTime() - now;
   const duration = Math.round(e.durationMin * (1 + e.extraTimePct / 100));
   return (
-    <Card className="flex flex-col p-5 transition hover:border-line-strong">
+    <Card className="lift flex flex-col p-5 hover:border-line-strong">
       <div className="mb-3 flex items-center justify-between gap-2">
         <PhaseBadge phase={e.phase} paused={e.paused} />
         {e.attempt && <AttemptBadge status={e.attempt.status} />}
